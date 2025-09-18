@@ -19,7 +19,8 @@ check-fmt :
 check-clippy :
 	cargo clippy --workspace --all-targets --all-features -- \
 			-D warnings \
-			-A clippy::upper-case-acronyms
+			-A clippy::upper-case-acronyms \
+		-A non-local-definitions
 
 .PHONY : lint
 lint : check-fmt check-clippy

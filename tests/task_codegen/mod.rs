@@ -91,10 +91,12 @@ fn task_with_strings(s1: String, s2: String) -> TaskResult<String> {
     Ok(format!("{s1}, {s2}"))
 }
 
+#[allow(dead_code)]
 async fn task_on_failure<T: Task>(task: &T, _err: &TaskError) {
     println!("Ahhhhh task {}[{}] failed!", task.name(), task.request().id);
 }
 
+#[allow(dead_code)]
 async fn task_on_success<T: Task>(task: &T, _ret: &T::Returns) {
     println!(
         "Woooooo task {}[{}] succeeded!",

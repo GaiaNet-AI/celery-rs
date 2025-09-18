@@ -1,7 +1,7 @@
 //! Provides the [`Task`] trait as well as options for configuring tasks.
 
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use rand::distributions::{Distribution, Uniform};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -115,7 +115,8 @@ pub trait Task: Send + Sync + std::marker::Sized {
                 let now_millis = now.subsec_millis();
                 let eta_secs = now_secs + countdown;
                 Some(DateTime::<Utc>::from_naive_utc_and_offset(
-                    NaiveDateTime::from_timestamp_opt(eta_secs as i64, now_millis * 1000)
+                    DateTime::from_timestamp(eta_secs as i64, now_millis * 1000)
+                        .map(|dt| dt.naive_utc())
                         .ok_or_else(|| {
                             TaskError::UnexpectedError(format!(
                                 "Invalid countdown seconds {countdown}",
@@ -153,7 +154,8 @@ pub trait Task: Send + Sync + std::marker::Sized {
                 let now_millis = now.subsec_millis();
                 let eta_secs = now_secs + delay_secs;
                 let eta_millis = now_millis + delay_millis;
-                NaiveDateTime::from_timestamp_opt(eta_secs as i64, eta_millis * 1000)
+                DateTime::from_timestamp(eta_secs as i64, eta_millis * 1000)
+                    .map(|dt| dt.naive_utc())
                     .map(|eta| DateTime::<Utc>::from_naive_utc_and_offset(eta, Utc))
             }
             Err(_) => None,

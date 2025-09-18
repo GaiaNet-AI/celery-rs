@@ -262,7 +262,7 @@ impl<'a> TimeUnitFieldIterator<'a> {
             }
         });
         if let Some(start) = vec_iter.next() {
-            if let Some(stop) = vec_iter.last() {
+            if let Some(stop) = vec_iter.next_back() {
                 VecRange {
                     vec,
                     current: start,

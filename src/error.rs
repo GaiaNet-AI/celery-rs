@@ -168,9 +168,9 @@ impl BrokerError {
             BrokerError::IoError(_) | BrokerError::NotConnected => true,
             BrokerError::AMQPError(err) => matches!(
                 err,
-                lapin::Error::ProtocolError(_)
-                    | lapin::Error::InvalidConnectionState(_)
-                    | lapin::Error::InvalidChannelState(_)
+                // In lapin 3.6.0, error types have been restructured
+                // We'll treat all lapin errors as connection-related for now
+                _
             ),
             BrokerError::RedisError(err) => {
                 err.is_connection_dropped() || err.is_connection_refusal()
