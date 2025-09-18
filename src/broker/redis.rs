@@ -1,4 +1,4 @@
-//! Redis broker.
+//! Redis broker using deadpool-redis for better multithreading support.
 #![allow(dead_code)]
 use super::{Broker, BrokerBuilder, DeliveryError, DeliveryStream};
 use crate::error::{BrokerError, ProtocolError};
@@ -8,20 +8,17 @@ use crate::protocol::Message;
 use crate::protocol::TryDeserializeMessage;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::Stream;
+use deadpool_redis::{Config as PoolConfig, Pool, Runtime};
+use futures::{Stream, Future};
 use log::{debug, error, warn};
-use redis::aio::ConnectionManager;
-use redis::Client;
 use redis::RedisError;
 use std::clone::Clone;
 use std::collections::HashSet;
 use std::fmt;
-use std::future::Future;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::task::{Poll, Waker};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -73,32 +70,29 @@ impl BrokerBuilder for RedisBrokerBuilder {
         self
     }
 
-    /// Construct the `Broker` with the given configuration.
+    /// Construct the `Broker` with the given configuration using deadpool-redis.
     async fn build(&self, _connection_timeout: u32) -> Result<Box<dyn Broker>, BrokerError> {
         let mut queues: HashSet<String> = HashSet::new();
         for queue_name in &self.config.queues {
             queues.insert(queue_name.into());
         }
-        log::info!("Creating client");
-        let client = Client::open(&self.config.broker_url[..])
-            .map_err(|_| BrokerError::InvalidBrokerUrl(self.config.broker_url.clone()))?;
 
-        // let blocking_conn = client.get_connection().unwrap();
-
-        log::info!("Creating tokio manager");
-        let manager = client.get_connection_manager().await?;
+        log::info!("Creating deadpool-redis pool");
+        let pool_config = PoolConfig::from_url(&self.config.broker_url);
+        let pool = pool_config
+            .create_pool(Some(Runtime::Tokio1))
+            .map_err(|e| BrokerError::InvalidBrokerUrl(format!("Pool creation failed: {}", e)))?;
 
         log::info!("Creating mpsc channel");
         let (tx, rx) = channel(1);
-        log::info!("Creating broker");
+        log::info!("Creating broker with connection pool");
         Ok(Box::new(RedisBroker {
             uri: self.config.broker_url.clone(),
             queues,
-            client,
-            manager,
+            pool,
             prefetch_count: Arc::new(AtomicU16::new(self.config.prefetch_count)),
             pending_tasks: Arc::new(AtomicU16::new(0)),
-            waker_rx: Mutex::new(rx),
+            waker_rx: tokio::sync::Mutex::new(rx),
             waker_tx: tx,
             delivery_info: DeliveryInfo::for_redis_default(),
         }))
@@ -107,9 +101,8 @@ impl BrokerBuilder for RedisBrokerBuilder {
 
 pub struct RedisBroker {
     uri: String,
-    /// Broker connection.
-    client: Client,
-    manager: ConnectionManager,
+    /// Redis connection pool for multithreading
+    pool: Pool,
     /// Mapping of queue name to Queue struct.
     queues: HashSet<String>,
 
@@ -117,7 +110,7 @@ pub struct RedisBroker {
     /// mutability.
     prefetch_count: Arc<AtomicU16>,
     pending_tasks: Arc<AtomicU16>,
-    waker_rx: Mutex<Receiver<Waker>>,
+    waker_rx: tokio::sync::Mutex<Receiver<Waker>>,
     waker_tx: Sender<Waker>,
 
     delivery_info: DeliveryInfo,
@@ -125,7 +118,7 @@ pub struct RedisBroker {
 
 #[derive(Clone)]
 pub struct Channel {
-    connection: ConnectionManager,
+    pool: Pool,
     queue_name: String,
     delivery_info: DeliveryInfo,
 }
@@ -137,9 +130,9 @@ impl fmt::Debug for Channel {
 }
 
 impl Channel {
-    fn new(connection: ConnectionManager, queue_name: String, delivery_info: DeliveryInfo) -> Self {
+    fn new(pool: Pool, queue_name: String, delivery_info: DeliveryInfo) -> Self {
         Self {
-            connection,
+            pool,
             queue_name,
             delivery_info,
         }
@@ -183,11 +176,13 @@ impl Channel {
         }
     }
 
-    async fn send_task(mut self, message: &Message) -> Result<(), BrokerError> {
+    async fn send_task(self, message: &Message) -> Result<(), BrokerError> {
+        let mut conn = self.pool.get().await
+            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
         Ok(redis::cmd("LPUSH")
             .arg(&self.queue_name)
             .arg(message.json_serialized(Some(self.delivery_info))?)
-            .query_async(&mut self.connection)
+            .query_async(&mut *conn)
             .await?)
     }
 
@@ -200,10 +195,12 @@ impl Channel {
     }
 
     async fn remove_task(&self, delivery: &Delivery) -> Result<(), BrokerError> {
+        let mut conn = self.pool.get().await
+            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
         redis::cmd("HDEL")
             .arg(&self.process_map_name())
             .arg(&delivery.properties.correlation_id)
-            .query_async::<()>(&mut self.connection.clone())
+            .query_async::<()>(&mut *conn)
             .await?;
         Ok(())
     }
@@ -306,7 +303,7 @@ impl Broker for RedisBroker {
     ) -> Result<(String, Box<dyn DeliveryStream>), BrokerError> {
         let consumer = Consumer {
             channel: Channel {
-                connection: self.manager.clone(),
+                pool: self.pool.clone(),
                 queue_name: queue.to_string(),
                 delivery_info: self.delivery_info.clone(),
             },

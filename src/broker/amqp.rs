@@ -94,12 +94,8 @@ fn create_base_connection_properties() -> ConnectionProperties {
     ConnectionProperties::default().with_executor(TokioExecutor::current())
 }
 
-#[cfg(unix)]
 fn create_connection_properties() -> ConnectionProperties {
-    create_base_connection_properties().with_reactor(tokio_reactor_trait::Tokio)
-}
-#[cfg(windows)]
-fn create_connection_properties() -> ConnectionProperties {
+    // In lapin 3.6.0, reactor is automatically handled by the runtime
     create_base_connection_properties()
 }
 
@@ -243,10 +239,11 @@ impl Broker for AMQPBroker {
         queue: &str,
         error_handler: Box<dyn Fn(BrokerError) + Send + Sync + 'static>,
     ) -> Result<(String, Box<dyn DeliveryStream>), BrokerError> {
-        self.conn
-            .lock()
-            .await
-            .on_error(move |e| error_handler(BrokerError::from(e)));
+        // TODO: Replace with events_listener in lapin 3.6.0
+        // self.conn
+        //     .lock()
+        //     .await
+        //     .on_error(move |e| error_handler(BrokerError::from(e)));
         let queues = self.queues.read().await;
         let queue = queues
             .get(queue)

@@ -36,7 +36,7 @@ serde_yaml = { version = "0.9", optional = true }
 serde-pickle = { version = "1.1", optional = true }
 thiserror = "1.0"
 async-trait = "0.1.43"
-lapin = { version = "2.1.1", default-features = false }
+lapin = { version = "3.6.0", default-features = false }
 log = "0.4"
 futures = { version = "0.3", features = ["async-await"] }
 uuid = { version = "1.18", features = ["v4"]}
@@ -46,7 +46,8 @@ colored = "2"
 once_cell = { version = "1.17" }
 globset = "0.4"
 hostname = "0.3"
-redis = { version = "0.32", features=["connection-manager", "tokio-comp"] }
+redis = { version = "0.32.5", features=["connection-manager", "tokio-comp"] }
+deadpool-redis = { version = "0.22.0", features = ["rt_tokio_1"] }
 tokio-executor-trait = "2.1"
 tokio-reactor-trait = "1.1"
 futures-lite = "1.12"
