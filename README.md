@@ -8,21 +8,24 @@
     </p>
     <hr/>
 </div>
+
+> **📢 Project Status**: This is a community-maintained fork of the original [rusty-celery](https://github.com/rusty-celery/rusty-celery) project. The original project became inactive, so we've taken over maintenance to ensure continued development and support for the Rust Celery ecosystem.
+
 <p align="center">
-    <a href="https://github.com/rusty-celery/rusty-celery/actions">
-        <img alt="Build" src="https://github.com/rusty-celery/rusty-celery/workflows/CI/badge.svg?event=push&branch=main">
+    <a href="https://github.com/GaiaNet-AI/celery-rs/actions">
+        <img alt="Build" src="https://github.com/GaiaNet-AI/celery-rs/workflows/CI/badge.svg?event=push&branch=main">
     </a>
-    <a href="https://github.com/rusty-celery/rusty-celery/blob/main/LICENSE">
-        <img alt="License" src="https://img.shields.io/github/license/rusty-celery/rusty-celery.svg?color=blue&cachedrop">
+    <a href="https://github.com/GaiaNet-AI/celery-rs/blob/main/LICENSE">
+        <img alt="License" src="https://img.shields.io/github/license/GaiaNet-AI/celery-rs.svg?color=blue&cachedrop">
     </a>
-    <a href="https://crates.io/crates/celery">
-        <img alt="Crates" src="https://img.shields.io/crates/v/celery.svg?color=blue">
+    <a href="https://crates.io/crates/celery-rs">
+        <img alt="Crates" src="https://img.shields.io/crates/v/celery-rs.svg?color=blue">
     </a>
-    <a href="https://docs.rs/celery/">
+    <a href="https://docs.rs/celery-rs/">
         <img alt="Docs" src="https://img.shields.io/badge/docs.rs-API%20docs-blue">
     </a>
-    <a href="https://github.com/rusty-celery/rusty-celery/issues?q=is%3Aissue+is%3Aopen+label%3A%22Status%3A+Help+Wanted%22">
-        <img alt="Help wanted" src="https://img.shields.io/github/issues/rusty-celery/rusty-celery/Status%3A%20Help%20Wanted?label=Help%20Wanted">
+    <a href="https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+is%3Aopen+label%3A%22help%20wanted%22">
+        <img alt="Help wanted" src="https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/help%20wanted?label=Help%20Wanted">
     </a>
 </p>
 <br/>
@@ -34,7 +37,7 @@ If you already know the basics of Rust but are new to Celery, check out the [Rus
 
 ## Quick start
 
-Define tasks by decorating functions with the [`task`](https://docs.rs/celery/*/celery/attr.task.html) attribute.
+Define tasks by decorating functions with the [`task`](https://docs.rs/celery-rs/*/celery/attr.task.html) attribute.
 
 ```rust
 use celery::prelude::*;
@@ -45,7 +48,7 @@ fn add(x: i32, y: i32) -> TaskResult<i32> {
 }
 ```
 
-Create an app with the [`app`](https://docs.rs/celery/*/celery/macro.celery_app.html) macro
+Create an app with the [`app`](https://docs.rs/celery-rs/*/celery/macro.app.html) macro
 and register your tasks with it:
 
 ```rust
@@ -166,5 +169,44 @@ And then you can consume tasks from Rust or Python as explained above.
 
 |             | Status | Tracking |
 | ----------- |:------:| -------- |
-| RPC         | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20RPC?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20RPC) |
-| Redis       | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20Redis?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20Redis) |
+| RPC         | 🔴     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Backend%3A%20RPC?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Backend%3A%20RPC) |
+| Redis       | 🔴     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Backend%3A%20Redis?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Backend%3A%20Redis) |
+
+## Project History and Maintenance
+
+### This is a Community Fork
+
+This project (`celery-rs`) is a community-maintained fork of the original [`rusty-celery`](https://github.com/rusty-celery/rusty-celery) project. We've taken over maintenance due to the original project becoming inactive.
+
+**Key Changes in This Fork:**
+- ✅ **Active Maintenance**: Regular updates and bug fixes
+- ✅ **Updated Dependencies**: All dependencies kept up-to-date
+- ✅ **Improved Stability**: Fixed broker connection issues and test reliability
+- ✅ **Modern Rust**: Compatible with latest Rust versions and async ecosystem
+
+### Migration from rusty-celery
+
+If you're migrating from the original `rusty-celery`, the API remains **100% compatible**. Simply update your `Cargo.toml`:
+
+```toml
+[dependencies]
+# Change from:
+# celery = "0.5"
+
+# To:
+celery-rs = "0.6"
+# Or use git directly:
+# celery-rs = { git = "https://github.com/GaiaNet-AI/celery-rs", branch = "main" }
+```
+
+### Contributing
+
+We welcome contributions! This fork aims to:
+- Maintain API compatibility with the original project
+- Provide active maintenance and support
+- Keep dependencies updated
+- Fix bugs and add features requested by the community
+
+### Acknowledgments
+
+Special thanks to the original [`rusty-celery`](https://github.com/rusty-celery/rusty-celery) team for creating this excellent foundation. This fork builds upon their work while ensuring continued development and support for the Rust Celery ecosystem.

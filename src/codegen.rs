@@ -1,4 +1,4 @@
-pub use celery_codegen::task;
+pub use celery_rs_codegen::task;
 
 #[doc(hidden)]
 #[macro_export]
@@ -90,10 +90,10 @@ macro_rules! __beat_internal {
 ///
 /// Following the task routing rules there are a number of other optional parameters that
 /// may appear in arbitrary order (all of which correspond to a method on the
-/// [`CeleryBuilder`](struct.CeleryBuilder.html) struct):
+///   [`CeleryBuilder`](struct.CeleryBuilder.html) struct):
 ///
 /// - `default_queue`: Set the
-/// [`CeleryBuilder::default_queue`](struct.CeleryBuilder.html#method.default_queue).
+///   [`CeleryBuilder::default_queue`](struct.CeleryBuilder.html#method.default_queue).
 /// - `prefetch_count`: Set the [`CeleryBuilder::prefect_count`](struct.CeleryBuilder.html#method.prefect_count).
 /// - `heartbeat`: Set the [`CeleryBuilder::heartbeat`](struct.CeleryBuilder.html#method.heartbeat).
 /// - `task_time_limit`: Set an app-level [`TaskOptions::time_limit`](task/struct.TaskOptions.html#structfield.time_limit).
@@ -104,11 +104,11 @@ macro_rules! __beat_internal {
 /// - `task_retry_for_unexpected`: Set an app-level [`TaskOptions::retry_for_unexpected`](task/struct.TaskOptions.html#structfield.retry_for_unexpected).
 /// - `acks_late`: Set an app-level [`TaskOptions::acks_late`](task/struct.TaskOptions.html#structfield.acks_late).
 /// - `broker_connection_timeout`: Set the
-/// [`CeleryBuilder::broker_connection_timeout`](struct.CeleryBuilder.html#method.broker_connection_timeout).
+///   [`CeleryBuilder::broker_connection_timeout`](struct.CeleryBuilder.html#method.broker_connection_timeout).
 /// - `broker_connection_retry`: Set the
-/// [`CeleryBuilder::broker_connection_retry`](struct.CeleryBuilder.html#method.broker_connection_retry).
+///   [`CeleryBuilder::broker_connection_retry`](struct.CeleryBuilder.html#method.broker_connection_retry).
 /// - `broker_connection_max_retries`: Set the
-/// [`CeleryBuilder::broker_connection_max_retries`](struct.CeleryBuilder.html#method.broker_connection_max_retries).
+///   [`CeleryBuilder::broker_connection_max_retries`](struct.CeleryBuilder.html#method.broker_connection_max_retries).
 ///
 /// # Examples
 ///
@@ -192,14 +192,14 @@ macro_rules! app {
 /// (all of which correspond to a method on the [`BeatBuilder`](beat/struct.BeatBuilder.html) struct):
 ///
 /// - `default_queue`: Set the
-/// [`BeatBuilder::default_queue`](beat/struct.BeatBuilder.html#method.default_queue).
+///   [`BeatBuilder::default_queue`](beat/struct.BeatBuilder.html#method.default_queue).
 /// - `heartbeat`: Set the [`BeatBuilder::heartbeat`](beat/struct.BeatBuilder.html#method.heartbeat).
 /// - `broker_connection_timeout`: Set the
-/// [`BeatBuilder::broker_connection_timeout`](beat/struct.BeatBuilder.html#method.broker_connection_timeout).
+///   [`BeatBuilder::broker_connection_timeout`](beat/struct.BeatBuilder.html#method.broker_connection_timeout).
 /// - `broker_connection_retry`: Set the
-/// [`BeatBuilder::broker_connection_retry`](beat/struct.BeatBuilder.html#method.broker_connection_retry).
+///   [`BeatBuilder::broker_connection_retry`](beat/struct.BeatBuilder.html#method.broker_connection_retry).
 /// - `broker_connection_max_retries`: Set the
-/// [`BeatBuilder::broker_connection_max_retries`](beat/struct.BeatBuilder.html#method.broker_connection_max_retries).
+///   [`BeatBuilder::broker_connection_max_retries`](beat/struct.BeatBuilder.html#method.broker_connection_max_retries).
 ///
 /// # Examples
 ///

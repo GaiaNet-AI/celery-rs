@@ -1,3 +1,5 @@
+#![allow(non_local_definitions)]
+
 //! A Rust implementation of [Celery](http://www.celeryproject.org/) for producing and consuming
 //! asynchronous tasks with a distributed message queue.
 //!
@@ -107,7 +109,7 @@ mod codegen;
 /// # Parameters
 ///
 /// - `name`: The name to use when registering the task. Should be unique. If not given the name
-/// will be set to the name of the function being decorated.
+///   will be set to the name of the function being decorated.
 /// - `time_limit`: Set a task-level [`TaskOptions::time_limit`](task/struct.TaskOptions.html#structfield.time_limit).
 /// - `hard_time_limit`: Set a task-level [`TaskOptions::hard_time_limit`](task/struct.TaskOptions.html#structfield.hard_time_limit).
 /// - `max_retries`: Set a task-level [`TaskOptions::max_retries`](task/struct.TaskOptions.html#structfield.max_retries).
@@ -117,12 +119,12 @@ mod codegen;
 /// - `acks_late`: Set a task-level [`TaskOptions::acks_late`](task/struct.TaskOptions.html#structfield.acks_late).
 /// - `content_type`: Set a task-level [`TaskOptions::content_type`](task/struct.TaskOptions.html#structfield.content_type).
 /// - `bind`: A bool. If true, the task will be run like an instance method and so the function's
-/// first argument should be a reference to `Self`. Note however that Rust won't allow you to call
-/// the argument `self`. Instead, you could use `task` or just `t`.
+///   first argument should be a reference to `Self`. Note however that Rust won't allow you to call
+///   the argument `self`. Instead, you could use `task` or just `t`.
 /// - `on_failure`: An async callback function to run when the task fails. Should accept a reference to
-/// a task instance and a reference to a [`TaskError`](error/enum.TaskError.html).
+///   a task instance and a reference to a [`TaskError`](error/enum.TaskError.html).
 /// - `on_success`: An async callback function to run when the task succeeds. Should accept a reference to
-/// a task instance and a reference to the value returned by the task.
+///   a task instance and a reference to the value returned by the task.
 ///
 /// For more information see the [tasks chapter](https://rusty-celery.github.io/guide/defining-tasks.html)
 /// in the Rusty Celery Book.

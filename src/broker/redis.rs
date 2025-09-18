@@ -9,13 +9,13 @@ use crate::protocol::TryDeserializeMessage;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use deadpool_redis::{Config as PoolConfig, Pool, Runtime};
-use futures::{Stream, Future};
+use futures::{Future, Stream};
 use log::{debug, error, warn};
 use redis::RedisError;
 use std::clone::Clone;
 use std::collections::HashSet;
 use std::fmt;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use std::task::{Poll, Waker};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -94,6 +94,7 @@ impl BrokerBuilder for RedisBrokerBuilder {
             pending_tasks: Arc::new(AtomicU16::new(0)),
             waker_rx: tokio::sync::Mutex::new(rx),
             waker_tx: tx,
+            is_closed: Arc::new(AtomicBool::new(false)),
             delivery_info: DeliveryInfo::for_redis_default(),
         }))
     }
@@ -112,6 +113,8 @@ pub struct RedisBroker {
     pending_tasks: Arc<AtomicU16>,
     waker_rx: tokio::sync::Mutex<Receiver<Waker>>,
     waker_tx: Sender<Waker>,
+    /// Track whether the broker is closed
+    is_closed: Arc<AtomicBool>,
 
     delivery_info: DeliveryInfo,
 }
@@ -151,8 +154,12 @@ impl Channel {
             futures::pending!();
         }
 
-        let mut conn = self.pool.get().await
-            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+        let mut conn = self.pool.get().await.map_err(|e| {
+            BrokerError::IoError(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                e,
+            ))
+        })?;
 
         loop {
             let rez: Result<Option<String>, RedisError> = redis::cmd("RPOP")
@@ -168,7 +175,7 @@ impl Channel {
                         delivery.properties.delivery_tag, delivery.headers.task
                     );
                     let _set_rez: u32 = redis::cmd("HSET")
-                        .arg(&self.process_map_name())
+                        .arg(self.process_map_name())
                         .arg(&delivery.properties.correlation_id)
                         .arg(&rez)
                         .query_async(&mut *conn)
@@ -181,8 +188,12 @@ impl Channel {
     }
 
     async fn send_task(self, message: &Message) -> Result<(), BrokerError> {
-        let mut conn = self.pool.get().await
-            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+        let mut conn = self.pool.get().await.map_err(|e| {
+            BrokerError::IoError(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                e,
+            ))
+        })?;
         Ok(redis::cmd("LPUSH")
             .arg(&self.queue_name)
             .arg(message.json_serialized(Some(self.delivery_info))?)
@@ -199,10 +210,14 @@ impl Channel {
     }
 
     async fn remove_task(&self, delivery: &Delivery) -> Result<(), BrokerError> {
-        let mut conn = self.pool.get().await
-            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+        let mut conn = self.pool.get().await.map_err(|e| {
+            BrokerError::IoError(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                e,
+            ))
+        })?;
         redis::cmd("HDEL")
-            .arg(&self.process_map_name())
+            .arg(self.process_map_name())
             .arg(&delivery.properties.correlation_id)
             .query_async::<()>(&mut *conn)
             .await?;
@@ -211,7 +226,7 @@ impl Channel {
 }
 
 type ConsumerOutput = Result<Delivery, BrokerError>;
-type ConsumerOutputFuture = Box<dyn Future<Output = ConsumerOutput>>;
+type ConsumerOutputFuture = Box<dyn Future<Output = ConsumerOutput> + Send>;
 
 pub struct Consumer {
     channel: Channel,
@@ -357,6 +372,11 @@ impl Broker for RedisBroker {
 
     /// Send a [`Message`](protocol/struct.Message.html) into a queue.
     async fn send(&self, message: &Message, queue: &str) -> Result<(), BrokerError> {
+        // Check if the broker is closed
+        if self.is_closed.load(Ordering::SeqCst) {
+            return Err(BrokerError::NotConnected);
+        }
+
         Channel::new(
             self.pool.clone(),
             queue.to_string(),
@@ -383,8 +403,8 @@ impl Broker for RedisBroker {
 
     /// Close connection pool.
     async fn close(&self) -> Result<(), BrokerError> {
-        // With connection pool, we don't need to explicitly close
-        // The pool will handle connection cleanup automatically
+        // Mark the broker as closed
+        self.is_closed.store(true, Ordering::SeqCst);
         Ok(())
     }
 
@@ -409,11 +429,18 @@ impl Broker for RedisBroker {
     async fn reconnect(&self, _connection_timeout: u32) -> Result<(), BrokerError> {
         // With deadpool-redis, reconnection is handled automatically by the pool
         // Just test if we can get a connection
-        let mut conn = self.pool.get().await
-            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+        let mut conn = self.pool.get().await.map_err(|e| {
+            BrokerError::IoError(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                e,
+            ))
+        })?;
 
         // Test the connection with a PING
         let _: String = redis::cmd("PING").query_async(&mut *conn).await?;
+
+        // Mark the broker as reconnected
+        self.is_closed.store(false, Ordering::SeqCst);
         Ok(())
     }
 

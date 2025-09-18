@@ -23,7 +23,7 @@ enum TaskAttr {
     TimeLimit(syn::LitInt),
     HardTimeLimit(syn::LitInt),
     ExpiresIn(syn::LitInt),
-    Expires(syn::Expr),
+    Expires(Box<syn::Expr>),
     MaxRetries(syn::LitInt),
     MinRetryDelay(syn::LitInt),
     MaxRetryDelay(syn::LitInt),
@@ -127,7 +127,7 @@ impl TaskAttrs {
         self.attrs
             .iter()
             .filter_map(|a| match a {
-                TaskAttr::Expires(r) => Some(r.clone()),
+                TaskAttr::Expires(r) => Some((**r).clone()),
                 _ => None,
             })
             .next()
@@ -280,7 +280,7 @@ impl parse::Parse for TaskAttr {
             if let Ok(parsed) = syn::LitInt::parse(input) {
                 Ok(TaskAttr::ExpiresIn(parsed))
             } else {
-                Ok(TaskAttr::Expires(input.parse()?))
+                Ok(TaskAttr::Expires(Box::new(input.parse()?)))
             }
         } else if lookahead.peek(kw::max_retries) {
             input.parse::<kw::max_retries>()?;

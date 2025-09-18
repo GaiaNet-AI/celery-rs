@@ -7,6 +7,7 @@ use std::future::Future;
 fn assert_send_sync<T: Send + Sync>() {}
 
 // 编译时验证某个 Future 是否实现了 Send
+#[allow(dead_code)]
 fn assert_future_send<T: Future + Send>(_: T) {}
 
 #[cfg(test)]
