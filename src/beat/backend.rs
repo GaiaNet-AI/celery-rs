@@ -24,6 +24,11 @@ pub trait SchedulerBackend {
     /// This method will not be called if `should_sync` returns `false`.
     fn sync(&mut self, scheduled_tasks: &mut BinaryHeap<ScheduledTask>) -> Result<(), BeatError>;
 
+    /// Get RedBeat lock implementation if this backend supports distributed locking
+    fn as_redbeat_lock(&self) -> Option<Box<dyn super::scheduler::RedBeatLock>> {
+        None
+    }
+
     // Maybe we should consider some methods to inform the backend that a task has been executed.
     // Not sure about what Python does, but at least it keeps a counter with the number of executed tasks,
     // and the backend has access to that.
@@ -49,3 +54,6 @@ impl SchedulerBackend for LocalSchedulerBackend {
         unimplemented!()
     }
 }
+
+// Re-export RedBeat scheduler backend from redbeat module
+pub use super::redbeat::RedBeatSchedulerBackend;

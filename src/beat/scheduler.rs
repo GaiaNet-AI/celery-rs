@@ -3,6 +3,7 @@ use crate::{broker::Broker, error::BeatError, protocol::TryCreateMessage};
 use log::{debug, info};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime};
+use async_trait::async_trait;
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -18,6 +19,14 @@ pub struct Scheduler {
     heap: BinaryHeap<ScheduledTask>,
     default_sleep_interval: Duration,
     pub broker: Box<dyn Broker>,
+    redbeat_backend: Option<Box<dyn RedBeatLock>>,
+}
+
+/// Trait for distributed locking in Beat scheduler
+#[async_trait::async_trait]
+pub trait RedBeatLock: Send + Sync {
+    async fn try_acquire_task_lock(&self, task_name: &str) -> Result<bool, BeatError>;
+    async fn release_task_lock(&self, task_name: &str) -> Result<(), BeatError>;
 }
 
 impl Scheduler {
@@ -27,7 +36,23 @@ impl Scheduler {
             heap: BinaryHeap::new(),
             default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
             broker,
+            redbeat_backend: None,
         }
+    }
+
+    /// Create a new scheduler with RedBeat distributed locking.
+    pub fn new_with_redbeat(broker: Box<dyn Broker>, redbeat_backend: Box<dyn RedBeatLock>) -> Scheduler {
+        Scheduler {
+            heap: BinaryHeap::new(),
+            default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
+            broker,
+            redbeat_backend: Some(redbeat_backend),
+        }
+    }
+
+    /// Get RedBeat backend if available
+    fn get_redbeat_backend(&self) -> Option<&Box<dyn RedBeatLock>> {
+        self.redbeat_backend.as_ref()
     }
 
     /// Schedule the execution of a task.
@@ -107,12 +132,21 @@ impl Scheduler {
         }
     }
 
-    /// Send a task to the broker.
+    /// Send a task to the broker with distributed lock protection.
     async fn send_scheduled_task(
         &self,
         scheduled_task: &mut ScheduledTask,
     ) -> Result<(), BeatError> {
         let queue = &scheduled_task.queue;
+        let task_name = &scheduled_task.name;
+
+        // Try to acquire distributed lock for this task
+        if let Some(redbeat_backend) = self.get_redbeat_backend() {
+            if !redbeat_backend.try_acquire_task_lock(task_name).await? {
+                debug!("Task {} is already running on another instance, skipping", task_name);
+                return Ok(());
+            }
+        }
 
         let message = scheduled_task.message_factory.try_create_message()?;
 

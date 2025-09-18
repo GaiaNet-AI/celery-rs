@@ -38,7 +38,9 @@ mod scheduler;
 pub use scheduler::Scheduler;
 
 mod backend;
-pub use backend::{LocalSchedulerBackend, SchedulerBackend};
+pub use backend::{LocalSchedulerBackend, RedBeatSchedulerBackend, SchedulerBackend};
+
+mod redbeat;
 
 mod schedule;
 pub use schedule::{CronSchedule, DeltaSchedule, Schedule};
@@ -198,7 +200,12 @@ where
         )
         .await?;
 
-        let scheduler = Scheduler::new(broker);
+        // Check if scheduler backend supports RedBeat distributed locking
+        let scheduler = if let Some(redbeat_backend) = self.scheduler_backend.as_redbeat_lock() {
+            Scheduler::new_with_redbeat(broker, redbeat_backend)
+        } else {
+            Scheduler::new(broker)
+        };
 
         Ok(Beat {
             name: self.config.name,
