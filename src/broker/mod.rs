@@ -39,9 +39,12 @@ pub trait Delivery: TryDeserializeMessage + Send + Sync + std::fmt::Debug {
 pub trait DeliveryError: std::fmt::Display + Send + Sync {}
 
 /// The stream type that the [`Celery`](crate::Celery) app will consume deliveries from.
-/// Now supports Send + Sync for multithreading with redis 1.0.0-alpha.1 and lapin 3.6.0+
+///
+/// NOTE: lapin 3.6.0+ supports Send + Sync, but Redis broker still has limitations
+/// due to underlying redis-rs client. For now, only AMQP broker supports true multithreading.
+/// TODO: Investigate alternative Redis clients or async patterns for full Send + Sync support
 pub trait DeliveryStream:
-    Stream<Item = Result<Box<dyn Delivery>, Box<dyn DeliveryError>>> + Unpin + Send + Sync
+    Stream<Item = Result<Box<dyn Delivery>, Box<dyn DeliveryError>>> + Unpin // + Send + Sync (pending Redis fix)
 {
 }
 

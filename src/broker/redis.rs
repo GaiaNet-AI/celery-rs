@@ -143,17 +143,21 @@ impl Channel {
     }
 
     async fn fetch_task(
-        mut self,
+        self,
         send_waker: Option<(Sender<Waker>, Waker)>,
     ) -> Result<Delivery, BrokerError> {
         if let Some((sender, waker)) = send_waker {
             sender.send(waker).await.unwrap();
             futures::pending!();
         }
+
+        let mut conn = self.pool.get().await
+            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+
         loop {
             let rez: Result<Option<String>, RedisError> = redis::cmd("RPOP")
                 .arg(&self.queue_name)
-                .query_async(&mut self.connection)
+                .query_async(&mut *conn)
                 .await;
             match rez {
                 Ok(None) => tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await,
@@ -167,7 +171,7 @@ impl Channel {
                         .arg(&self.process_map_name())
                         .arg(&delivery.properties.correlation_id)
                         .arg(&rez)
-                        .query_async(&mut self.connection)
+                        .query_async(&mut *conn)
                         .await?;
                     break Ok(delivery);
                 }
@@ -354,7 +358,7 @@ impl Broker for RedisBroker {
     /// Send a [`Message`](protocol/struct.Message.html) into a queue.
     async fn send(&self, message: &Message, queue: &str) -> Result<(), BrokerError> {
         Channel::new(
-            self.manager.clone(),
+            self.pool.clone(),
             queue.to_string(),
             self.delivery_info.clone(),
         )
@@ -377,10 +381,10 @@ impl Broker for RedisBroker {
         Ok(())
     }
 
-    /// Clone all channels and connection.
+    /// Close connection pool.
     async fn close(&self) -> Result<(), BrokerError> {
-        let mut conn = self.manager.clone();
-        redis::cmd("QUIT").query_async::<()>(&mut conn).await?;
+        // With connection pool, we don't need to explicitly close
+        // The pool will handle connection cleanup automatically
         Ok(())
     }
 
@@ -402,41 +406,15 @@ impl Broker for RedisBroker {
         }
     }
 
-    async fn reconnect(&self, connection_timeout: u32) -> Result<(), BrokerError> {
-        // Stop additional task fetching
-        let old_prefetch_count = self.prefetch_count.fetch_and(0, Ordering::SeqCst);
-        let mut conn = self.manager.clone();
-        let timed_out = false;
-        loop {
-            let rez: Result<String, RedisError> = redis::cmd("PING").query_async(&mut conn).await;
-            match rez {
-                Ok(rez) => {
-                    if rez.eq("PONG") {
-                        self.prefetch_count
-                            .store(old_prefetch_count, Ordering::SeqCst);
-                        return Ok(());
-                    } else {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(
-                            connection_timeout as u64,
-                        ))
-                        .await;
-                        continue;
-                    }
-                }
-                Err(e) => {
-                    if !timed_out {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(
-                            connection_timeout as u64,
-                        ))
-                        .await;
-                        continue;
-                    }
-                    self.prefetch_count
-                        .store(old_prefetch_count, Ordering::SeqCst);
-                    return Err(e.into());
-                }
-            }
-        }
+    async fn reconnect(&self, _connection_timeout: u32) -> Result<(), BrokerError> {
+        // With deadpool-redis, reconnection is handled automatically by the pool
+        // Just test if we can get a connection
+        let mut conn = self.pool.get().await
+            .map_err(|e| BrokerError::IoError(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))?;
+
+        // Test the connection with a PING
+        let _: String = redis::cmd("PING").query_async(&mut *conn).await?;
+        Ok(())
     }
 
     #[cfg(test)]
