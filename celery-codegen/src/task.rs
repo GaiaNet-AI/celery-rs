@@ -679,11 +679,6 @@ impl ToTokens for Task {
             None => quote! {},
         };
 
-        let dummy_const = syn::Ident::new(
-            &format!("__IMPL_CELERY_TASK_FOR_{wrapper}"),
-            Span::call_site(),
-        );
-
         let output = quote! {
             #wrapper_struct
 
@@ -695,11 +690,8 @@ impl ToTokens for Task {
                 #serialized_fields
             }
 
-            const #dummy_const: () = {
-                use #export::async_trait;
-
-                #[async_trait]
-                impl #krate::task::Task for #wrapper {
+            #[#export::async_trait]
+            impl #krate::task::Task for #wrapper {
                     const NAME: &'static str = #task_name;
                     const ARGS: &'static [&'static str] = &[#arg_names];
                     const DEFAULTS: #krate::task::TaskOptions = #krate::task::TaskOptions {
@@ -748,7 +740,6 @@ impl ToTokens for Task {
                         #call_on_success
                     }
                 }
-            };
         };
         dst.extend(output);
     }
