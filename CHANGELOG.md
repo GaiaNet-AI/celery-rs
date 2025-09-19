@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced deprecated `actions-rs/toolchain` with `actions-rust-lang/setup-rust-toolchain`
 - Replaced deprecated `actions-rs/cargo` with direct cargo commands
 - Updated `actions/checkout`, `actions/setup-python`, `actions/cache`, and `softprops/action-gh-release` to latest versions
+- Optimized CI by installing rustfmt/clippy components only in jobs that need them
 
 ### Fixed
 
