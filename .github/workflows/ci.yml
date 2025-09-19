@@ -55,6 +55,7 @@ jobs:
           - name: Lint
             run: make check-clippy
             components: clippy
+        services: {}
 
         include:
           - os: ubuntu-latest
