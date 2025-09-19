@@ -20,7 +20,8 @@ check-clippy :
 	cargo clippy --workspace --all-targets --all-features -- \
 			-D warnings \
 			-A clippy::upper-case-acronyms \
-		-A non-local-definitions
+		-A non-local-definitions \
+		-A clippy::manual_is_multiple_of
 
 .PHONY : lint
 lint : check-fmt check-clippy
