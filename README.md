@@ -148,29 +148,31 @@ And then you can consume tasks from Rust or Python as explained above.
 
 ### Core
 
+> **Note**: Issue tracking links below reference the original repository where development history is maintained.
+
 |                  | Status  | Tracking  |
 | ---------------- |:-------:| --------- |
-| Protocol         | ⚠️      | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Protocol%20Feature?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Protocol+Feature%22+is%3Aopen) |
+| Protocol         | ⚠️      | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Protocol%20Feature?label=Issues)](https://github.com/rusty-celery/rusty-celery/issues?q=is%3Aissue+label%3A%22Protocol+Feature%22+is%3Aopen) |
 | Producers        | ✅      | |
 | Consumers        | ✅      | |
 | Brokers          | ✅      | |
 | Beat             | ✅      | |
 | Backends         | 🔴      | |
-| [Baskets](https://github.com/GaiaNet-AI/celery-rs/issues/53) | 🔴      | |
+| [Baskets](https://github.com/rusty-celery/rusty-celery/issues/53) | 🔴      | |
 
 ### Brokers
 
 |       | Status | Tracking |
 | ----- |:------:| -------- |
-| AMQP  | ✅     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Broker%3A%20AMQP?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Broker%3A%20AMQP) |
-| Redis | ✅     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Broker%3A%20Redis?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Broker%3A%20Redis) |
+| AMQP  | ✅     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Broker%3A%20AMQP?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Broker%3A%20AMQP) |
+| Redis | ✅     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Broker%3A%20Redis?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Broker%3A%20Redis) |
 
 ### Backends
 
 |             | Status | Tracking |
 | ----------- |:------:| -------- |
-| RPC         | 🔴     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Backend%3A%20RPC?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Backend%3A%20RPC) |
-| Redis       | 🔴     | [![](https://img.shields.io/github/issues/GaiaNet-AI/celery-rs/Backend%3A%20Redis?label=Issues)](https://github.com/GaiaNet-AI/celery-rs/labels/Backend%3A%20Redis) |
+| RPC         | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20RPC?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20RPC) |
+| Redis       | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20Redis?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20Redis) |
 
 ## Project History and Maintenance
 
