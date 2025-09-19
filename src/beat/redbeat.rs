@@ -1,5 +1,5 @@
 /// RedBeat scheduler backend - Redis-based distributed scheduler
-/// 
+///
 /// This is equivalent to Python's `redbeat.RedBeatScheduler`
 use super::backend::SchedulerBackend;
 use super::scheduled_task::ScheduledTask;
@@ -27,7 +27,7 @@ struct RedBeatEntry {
 }
 
 /// RedBeat scheduler backend for distributed scheduling
-/// 
+///
 /// Equivalent to Python's `redbeat.RedBeatScheduler`
 #[derive(Clone)]
 pub struct RedBeatSchedulerBackend {
@@ -57,32 +57,44 @@ impl RedBeatSchedulerBackend {
 
     /// Try to acquire the distributed lock
     async fn acquire_lock(&self) -> Result<bool, BeatError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
         let hostname = hostname::get()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        
+
         let lock_value = format!("{}:{}", hostname, std::process::id());
-        
+
         // Use SET with NX and EX options for atomic lock acquisition
-        let result: RedisResult<String> = conn.set_options(&self.lock_key, &lock_value, 
-            redis::SetOptions::default()
-                .conditional_set(redis::ExistenceCheck::NX)
-                .with_expiration(redis::SetExpiry::EX(self.lock_timeout.as_secs()))
-        ).await;
+        let result: RedisResult<String> = conn
+            .set_options(
+                &self.lock_key,
+                &lock_value,
+                redis::SetOptions::default()
+                    .conditional_set(redis::ExistenceCheck::NX)
+                    .with_expiration(redis::SetExpiry::EX(self.lock_timeout.as_secs())),
+            )
+            .await;
 
         Ok(result.is_ok())
     }
 
     /// Release the distributed lock
     async fn release_lock(&self) -> Result<(), BeatError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
-        let _: () = conn.del(&self.lock_key).await
+        let _: () = conn
+            .del(&self.lock_key)
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to release lock: {}", e)))?;
 
         Ok(())
@@ -90,10 +102,15 @@ impl RedBeatSchedulerBackend {
 
     /// Load schedule from Redis
     async fn load_schedule(&self) -> Result<HashMap<String, RedBeatEntry>, BeatError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
-        let schedule_data: HashMap<String, String> = conn.hgetall(&self.schedule_key).await
+        let schedule_data: HashMap<String, String> = conn
+            .hgetall(&self.schedule_key)
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to load schedule: {}", e)))?;
 
         let mut schedule = HashMap::new();
@@ -122,7 +139,7 @@ impl SchedulerBackend for RedBeatSchedulerBackend {
         // 简化实现，避免在同步方法中使用异步代码
         // 实际的分布式锁逻辑在任务执行时进行
         log::debug!("RedBeat sync called - distributed locking handled at task level");
-        
+
         // 更新同步时间
         self.last_sync = SystemTime::now();
         Ok(())
@@ -136,7 +153,10 @@ impl SchedulerBackend for RedBeatSchedulerBackend {
 #[async_trait::async_trait]
 impl RedBeatLock for RedBeatSchedulerBackend {
     async fn try_acquire_task_lock(&self, task_name: &str) -> Result<bool, BeatError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
         let lock_key = format!("redbeat:task_lock:{}", task_name);
@@ -146,22 +166,31 @@ impl RedBeatLock for RedBeatSchedulerBackend {
             .to_string();
         let lock_value = format!("{}:{}", hostname, std::process::id());
 
-        // Try to acquire lock with 60 second TTL
-        let result: RedisResult<String> = conn.set_options(&lock_key, &lock_value, 
-            redis::SetOptions::default()
-                .conditional_set(redis::ExistenceCheck::NX)
-                .with_expiration(redis::SetExpiry::EX(60))
-        ).await;
+        // Try to acquire lock with 30 second TTL
+        let result: RedisResult<String> = conn
+            .set_options(
+                &lock_key,
+                &lock_value,
+                redis::SetOptions::default()
+                    .conditional_set(redis::ExistenceCheck::NX)
+                    .with_expiration(redis::SetExpiry::EX(30)),
+            )
+            .await;
 
         Ok(result.is_ok())
     }
 
     async fn release_task_lock(&self, task_name: &str) -> Result<(), BeatError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
         let lock_key = format!("redbeat:task_lock:{}", task_name);
-        let _: () = conn.del(&lock_key).await
+        let _: () = conn
+            .del(&lock_key)
+            .await
             .map_err(|e| BeatError::RedisError(format!("Failed to release task lock: {}", e)))?;
 
         Ok(())
