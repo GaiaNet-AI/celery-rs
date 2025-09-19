@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Updated GitHub Actions to latest versions to resolve deprecation warnings
+- Replaced deprecated `actions-rs/toolchain` with `actions-rust-lang/setup-rust-toolchain`
+- Replaced deprecated `actions-rs/cargo` with direct cargo commands
+- Updated `actions/checkout`, `actions/setup-python`, `actions/cache`, and `softprops/action-gh-release` to latest versions
+
+### Fixed
+
+- Fixed non-local impl definition errors for Rust 1.80+ compatibility
+- Simplified leap year calculation to avoid clippy warnings
+- Removed manual sccache configuration in favor of built-in caching
+
 ## [v0.5.5](https://github.com/rusty-celery/rusty-celery/releases/tag/v0.5.5) - 2023-09-25
 
 ### Fixed
