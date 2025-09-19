@@ -89,16 +89,6 @@ jobs:
               run: make run-all-tests
               components: ''
 
-          - os: ubuntu-latest
-            services: {}
-            task:
-              components: ''
-
-          - os: macos-latest
-            services: {}
-            task:
-              components: ''
-
           # Temporarily disabled due to regex-syntax 0.6.24 compatibility issue
           # See: https://github.com/rust-lang/regex/issues/878
           # - os: ubuntu-latest
