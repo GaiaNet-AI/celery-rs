@@ -107,7 +107,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-          rustflags: "-D warnings"
           components: rustfmt, clippy
 
       - name: Install Musl Tools
