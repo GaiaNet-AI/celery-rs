@@ -49,15 +49,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        rust: [stable]
-        task:
-          - name: Lint
-            run: make check-clippy
-            components: clippy
-        services: {}
-
         include:
+          # Lint tasks (ubuntu + macos)
+          - os: ubuntu-latest
+            rust: stable
+            services: {}
+            task:
+              name: Lint
+              run: make check-clippy
+              components: clippy
+
+          - os: macos-latest
+            rust: stable
+            services: {}
+            task:
+              name: Lint
+              run: make check-clippy
+              components: clippy
+
+          # Format task
           - os: ubuntu-latest
             rust: stable
             services: {}
