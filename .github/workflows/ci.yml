@@ -91,12 +91,14 @@ jobs:
           - os: macos-latest
             services: {}
 
-          - os: ubuntu-latest
-            rust: nightly
-            services: {}
-            task:
-              name: Check minimal versions
-              run: make check-minimal-versions   
+          # Temporarily disabled due to regex-syntax 0.6.24 compatibility issue
+          # See: https://github.com/rust-lang/regex/issues/878
+          # - os: ubuntu-latest
+          #   rust: nightly
+          #   services: {}
+          #   task:
+          #     name: Check minimal versions
+          #     run: make check-minimal-versions   
 
     steps:
       - uses: actions/checkout@v4
