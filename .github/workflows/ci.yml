@@ -54,6 +54,7 @@ jobs:
         task:
           - name: Lint
             run: make check-clippy
+            components: clippy
 
         include:
           - os: ubuntu-latest
@@ -62,6 +63,7 @@ jobs:
             task:
               name: Format
               run: make check-fmt
+              components: rustfmt
 
           - os: ubuntu-latest
             rust: nightly
@@ -69,6 +71,7 @@ jobs:
             task:
               name: Build docs
               run: make build-docs
+              components: ''
 
           - os: ubuntu-latest
             rust: stable
@@ -84,12 +87,17 @@ jobs:
             task:
               name: Run tests
               run: make run-all-tests
+              components: ''
 
           - os: ubuntu-latest
             services: {}
+            task:
+              components: ''
 
           - os: macos-latest
             services: {}
+            task:
+              components: ''
 
           # Temporarily disabled due to regex-syntax 0.6.24 compatibility issue
           # See: https://github.com/rust-lang/regex/issues/878
@@ -107,7 +115,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
+          components: ${{ matrix.task.components || '' }}
 
       - name: Install Musl Tools
         if: ${{ matrix.os == 'ubuntu-latest' }}
