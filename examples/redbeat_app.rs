@@ -1,9 +1,10 @@
 #![allow(unused_variables)]
 
 use anyhow::Result;
-use celery::beat::RedBeatSchedulerBackend;
+use celery::beat::{DeltaSchedule, CronSchedule, RedBeatSchedulerBackend};
 use celery::task::TaskResult;
 use env_logger::Env;
+use tokio::time::Duration;
 
 const QUEUE_NAME: &str = "celery";
 
@@ -31,7 +32,18 @@ async fn main() -> Result<()> {
     let mut beat = celery::beat!(
         broker = RedisBroker { std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into()) },
         scheduler_backend = RedBeatSchedulerBackend { redbeat_backend },
-        tasks = [],
+        tasks = [
+            "add_numbers" => {
+                add,
+                schedule = DeltaSchedule::new(Duration::from_secs(10)),
+                args = (5, 3),
+            },
+            "monitor" => {
+                monitor_task,
+                schedule = CronSchedule::from_string("*/1 * * * *")?,  // 每分钟执行一次
+                args = (),
+            }
+        ],
         task_routes = [
             "*" => QUEUE_NAME,
         ],
