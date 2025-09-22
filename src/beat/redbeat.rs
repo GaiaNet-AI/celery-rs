@@ -6,26 +6,10 @@ use super::scheduled_task::ScheduledTask;
 use super::scheduler::RedBeatLock;
 use crate::error::BeatError;
 use redis::{AsyncCommands, Client, RedisResult};
-use serde::{Deserialize, Serialize};
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const REDBEAT_LOCK_KEY: &str = "redbeat:lock";
-const REDBEAT_SCHEDULE_KEY: &str = "redbeat:schedule";
-const LOCK_TIMEOUT: u64 = 300; // 5 minutes
 const TASK_LOCK_TIMEOUT: u64 = 30; // 30 seconds for individual task locks
-
-#[derive(Debug, Serialize, Deserialize)]
-struct RedBeatEntry {
-    name: String,
-    task: String,
-    schedule: String,
-    args: Vec<serde_json::Value>,
-    kwargs: HashMap<String, serde_json::Value>,
-    enabled: bool,
-    last_run_at: Option<u64>,
-    total_run_count: u64,
-}
 
 /// RedBeat scheduler backend for distributed scheduling
 ///
@@ -33,9 +17,6 @@ struct RedBeatEntry {
 #[derive(Clone)]
 pub struct RedBeatSchedulerBackend {
     redis_client: Client,
-    lock_key: String,
-    schedule_key: String,
-    lock_timeout: Duration,
     last_sync: SystemTime,
     sync_interval: Duration,
 }
@@ -48,85 +29,9 @@ impl RedBeatSchedulerBackend {
 
         Ok(Self {
             redis_client,
-            lock_key: REDBEAT_LOCK_KEY.to_string(),
-            schedule_key: REDBEAT_SCHEDULE_KEY.to_string(),
-            lock_timeout: Duration::from_secs(LOCK_TIMEOUT),
             last_sync: UNIX_EPOCH,
             sync_interval: Duration::from_secs(30), // Sync every 30 seconds
         })
-    }
-
-    /// Try to acquire the distributed lock
-    async fn acquire_lock(&self) -> Result<bool, BeatError> {
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
-
-        let hostname = hostname::get()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        let lock_value = format!("{}:{}", hostname, std::process::id());
-
-        // Use SET with NX and EX options for atomic lock acquisition
-        let result: RedisResult<String> = conn
-            .set_options(
-                &self.lock_key,
-                &lock_value,
-                redis::SetOptions::default()
-                    .conditional_set(redis::ExistenceCheck::NX)
-                    .with_expiration(redis::SetExpiry::EX(self.lock_timeout.as_secs())),
-            )
-            .await;
-
-        Ok(result.is_ok())
-    }
-
-    /// Release the distributed lock
-    async fn release_lock(&self) -> Result<(), BeatError> {
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
-
-        let _: () = conn
-            .del(&self.lock_key)
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to release lock: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// Load schedule from Redis
-    async fn load_schedule(&self) -> Result<HashMap<String, RedBeatEntry>, BeatError> {
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
-
-        let schedule_data: HashMap<String, String> = conn
-            .hgetall(&self.schedule_key)
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to load schedule: {}", e)))?;
-
-        let mut schedule = HashMap::new();
-        for (key, value) in schedule_data {
-            match serde_json::from_str::<RedBeatEntry>(&value) {
-                Ok(entry) => {
-                    schedule.insert(key, entry);
-                }
-                Err(e) => {
-                    log::warn!("Failed to parse schedule entry {}: {}", key, e);
-                }
-            }
-        }
-
-        Ok(schedule)
     }
 }
 

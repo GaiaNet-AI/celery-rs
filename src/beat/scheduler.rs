@@ -3,7 +3,6 @@ use crate::{broker::Broker, error::BeatError, protocol::TryCreateMessage};
 use log::{debug, info};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime};
-use async_trait::async_trait;
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -41,7 +40,10 @@ impl Scheduler {
     }
 
     /// Create a new scheduler with RedBeat distributed locking.
-    pub fn new_with_redbeat(broker: Box<dyn Broker>, redbeat_backend: Box<dyn RedBeatLock>) -> Scheduler {
+    pub fn new_with_redbeat(
+        broker: Box<dyn Broker>,
+        redbeat_backend: Box<dyn RedBeatLock>,
+    ) -> Scheduler {
         Scheduler {
             heap: BinaryHeap::new(),
             default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
@@ -143,7 +145,10 @@ impl Scheduler {
         // Try to acquire distributed lock for this task
         if let Some(redbeat_backend) = self.get_redbeat_backend() {
             if !redbeat_backend.try_acquire_task_lock(task_name).await? {
-                debug!("Task {} is already running on another instance, skipping", task_name);
+                debug!(
+                    "Task {} is already running on another instance, skipping",
+                    task_name
+                );
                 return Ok(());
             }
         }
