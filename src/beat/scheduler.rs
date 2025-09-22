@@ -5,7 +5,12 @@ use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime};
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
-const MIN_TASK_INTERVAL: Duration = Duration::from_millis(500); // Minimum interval between task dispatches
+
+#[cfg(test)]
+const MIN_TASK_INTERVAL: Duration = Duration::from_millis(10); // Reduced for tests
+
+#[cfg(not(test))]
+const MIN_TASK_INTERVAL: Duration = Duration::from_millis(100); // Minimum interval between task dispatches
 
 /// A [`Scheduler`] is in charge of executing scheduled tasks when they are due.
 ///
