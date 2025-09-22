@@ -22,9 +22,9 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
-        fetch-deptch: 0
+        fetch-depth: 0
 
     - name: Check if source files have changed
       run: |
@@ -42,29 +42,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       RUST_BACKTRACE: full
-      RUSTC_WRAPPER: sccache
       RUSTV: ${{ matrix.rust }}
-      SCCACHE_CACHE_SIZE: 1G
-      CACHE_PREFIX: v0
       AMQP_ADDR: amqp://127.0.0.1:5672//
       REDIS_ADDR: redis://127.0.0.1:6379/
     services: ${{ matrix.services }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        rust: [stable]
-        task:
-          - name: Lint
-            run: make check-clippy
-
         include:
+          # Lint tasks (ubuntu + macos)
+          - os: ubuntu-latest
+            rust: stable
+            services: {}
+            task:
+              name: Lint
+              run: make check-clippy
+              components: clippy
+
+          - os: macos-latest
+            rust: stable
+            services: {}
+            task:
+              name: Lint
+              run: make check-clippy
+              components: clippy
+
+          # Format task
           - os: ubuntu-latest
             rust: stable
             services: {}
             task:
               name: Format
               run: make check-fmt
+              components: rustfmt
 
           - os: ubuntu-latest
             rust: nightly
@@ -72,6 +82,7 @@ jobs:
             task:
               name: Build docs
               run: make build-docs
+              components: ''
 
           - os: ubuntu-latest
             rust: stable
@@ -87,58 +98,25 @@ jobs:
             task:
               name: Run tests
               run: make run-all-tests
+              components: ''
 
-          - os: ubuntu-latest
-            services: {}
-
-          - os: macos-latest
-            services: {}
-
-          - os: ubuntu-latest
-            rust: nightly
-            services: {}
-            task:
-              name: Check minimal versions
-              run: make check-minimal-versions   
+          # Temporarily disabled due to regex-syntax 0.6.24 compatibility issue
+          # See: https://github.com/rust-lang/regex/issues/878
+          # - os: ubuntu-latest
+          #   rust: nightly
+          #   services: {}
+          #   task:
+          #     name: Check minimal versions
+          #     run: make check-minimal-versions   
 
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Prepare environment (ubuntu-latest)
-        run: |
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
-
-      - name: Prepare environment (macos-latest)
-        run: |
-          echo "SCCACHE_DIR=$HOME/Library/Caches/Mozilla.sccache" >> $GITHUB_ENV
-
-      - name: Install sccache (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.2.15
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          URL="$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz"
-          echo "Downloading sccache from $URL"
-          mkdir -p $HOME/.local/bin
-          curl -L $URL | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          # brew update  # takes forever
-          brew install sccache
+      - uses: actions/checkout@v4
 
       - name: Install Rust ${{ matrix.rust }}
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-          profile: minimal
-          override: true
+          components: ${{ matrix.task.components || '' }}
 
       - name: Install Musl Tools
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -148,41 +126,25 @@ jobs:
           echo "TARGET_CC=musl-gcc" | tee -a $GITHUB_ENV
           rustup target add x86_64-unknown-linux-musl
 
-      - name: Cache cargo registry and sccache
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ${{ env.SCCACHE_DIR }}
-          key: ${{ env.CACHE_PREFIX }}-${{ runner.os }}-${{ matrix.task.name }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            ${{ env.CACHE_PREFIX }}-${{ runner.os }}-${{ matrix.task.name }}-
-
-      - name: Start sccache server
-        run: sccache --start-server
+      # Caching is now handled automatically by actions-rust-lang/setup-rust-toolchain
 
       - name: ${{ matrix.task.name }}
         run: ${{ matrix.task.run }}
-
-      - name: Stop sccache server
-        run: sccache --stop-server || true
 
   test_python_example:
     name: Check python example
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: 3.9
 
     - name: Cache pip
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip # This path is specific to Ubuntu
         key: pip ${{ runner.os }} ${{ env.pythonLocation }} ${{ hashFiles('requirements.txt') }} ${{ hashFiles('dev-requirements.txt') }}

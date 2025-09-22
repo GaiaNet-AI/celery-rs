@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed compilation errors in `redbeat_app.rs` example
 - Fixed clippy warning about `&Box<T>` usage in scheduler backend
 - Fixed code formatting issues in `redbeat_distributed_lock.rs`
+### Changed
+
+- Updated GitHub Actions to latest versions to resolve deprecation warnings
+- Replaced deprecated `actions-rs/toolchain` with `actions-rust-lang/setup-rust-toolchain`
+- Replaced deprecated `actions-rs/cargo` with direct cargo commands
+- Updated `actions/checkout`, `actions/setup-python`, `actions/cache`, and `softprops/action-gh-release` to latest versions
+- Optimized CI by installing rustfmt/clippy components only in jobs that need them
+
+### Fixed
+
+- Fixed non-local impl definition errors for Rust 1.80+ compatibility
+- Simplified leap year calculation to avoid clippy warnings
+- Removed manual sccache configuration in favor of built-in caching
+- Temporarily disabled minimal versions check due to upstream regex-syntax compatibility issue
+- Removed global `-D warnings` rustflags to prevent builds failing on non-critical warnings
 
 ## [v0.5.5](https://github.com/rusty-celery/rusty-celery/releases/tag/v0.5.5) - 2023-09-25
 
