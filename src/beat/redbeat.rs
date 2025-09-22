@@ -42,11 +42,11 @@ impl SchedulerBackend for RedBeatSchedulerBackend {
     }
 
     fn sync(&mut self, _scheduled_tasks: &mut BinaryHeap<ScheduledTask>) -> Result<(), BeatError> {
-        // 简化实现，避免在同步方法中使用异步代码
-        // 实际的分布式锁逻辑在任务执行时进行
+        // Simplified implementation to avoid using async code in the sync method
+        // Actual distributed lock logic is handled during task execution
         log::debug!("RedBeat sync called - distributed locking handled at task level");
 
-        // 更新同步时间
+        // Update the last sync time
         self.last_sync = SystemTime::now();
         Ok(())
     }
