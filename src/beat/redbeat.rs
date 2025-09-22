@@ -5,6 +5,7 @@ use super::backend::SchedulerBackend;
 use super::scheduled_task::ScheduledTask;
 use super::scheduler::RedBeatLock;
 use crate::error::BeatError;
+use hostname;
 use redis::{AsyncCommands, Client, RedisResult};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
