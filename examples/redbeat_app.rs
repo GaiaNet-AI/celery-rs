@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
             },
             "monitor" => {
                 monitor_task,
-                schedule = CronSchedule::from_string("*/1 * * * *")?,  // 每分钟执行一次
+                schedule = CronSchedule::from_string("*/1 * * * *")?,  // Execute every minute
                 args = (),
             }
         ],
