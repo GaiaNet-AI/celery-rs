@@ -13,6 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const REDBEAT_LOCK_KEY: &str = "redbeat:lock";
 const REDBEAT_SCHEDULE_KEY: &str = "redbeat:schedule";
 const LOCK_TIMEOUT: u64 = 300; // 5 minutes
+const TASK_LOCK_TIMEOUT: u64 = 30; // 30 seconds for individual task locks
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RedBeatEntry {
@@ -166,14 +167,14 @@ impl RedBeatLock for RedBeatSchedulerBackend {
             .to_string();
         let lock_value = format!("{}:{}", hostname, std::process::id());
 
-        // Try to acquire lock with 30 second TTL
+        // Try to acquire lock with configurable TTL
         let result: RedisResult<String> = conn
             .set_options(
                 &lock_key,
                 &lock_value,
                 redis::SetOptions::default()
                     .conditional_set(redis::ExistenceCheck::NX)
-                    .with_expiration(redis::SetExpiry::EX(30)),
+                    .with_expiration(redis::SetExpiry::EX(TASK_LOCK_TIMEOUT)),
             )
             .await;
 
