@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added distributed locking support for RedBeat scheduler backend
+- Added `redbeat_distributed_lock.rs` example demonstrating distributed locking usage
+
+### Fixed
+
+- Fixed compilation errors in `redbeat_app.rs` example
+- Fixed clippy warning about `&Box<T>` usage in scheduler backend
+- Fixed code formatting issues in `redbeat_distributed_lock.rs`
+
 ## [v0.5.5](https://github.com/rusty-celery/rusty-celery/releases/tag/v0.5.5) - 2023-09-25
 
 ### Fixed

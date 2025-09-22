@@ -16,8 +16,8 @@ fn add(x: i32, y: i32) -> TaskResult<i32> {
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
 
     // Create RedBeat scheduler backend with distributed locking
     let redbeat_backend = RedBeatSchedulerBackend::new(redis_url)?;
