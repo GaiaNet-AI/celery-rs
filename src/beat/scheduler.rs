@@ -53,8 +53,8 @@ impl Scheduler {
     }
 
     /// Get RedBeat backend if available
-    fn get_redbeat_backend(&self) -> Option<&Box<dyn RedBeatLock>> {
-        self.redbeat_backend.as_ref()
+    fn get_redbeat_backend(&self) -> Option<&dyn RedBeatLock> {
+        self.redbeat_backend.as_deref()
     }
 
     /// Schedule the execution of a task.
