@@ -11,12 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added distributed locking support for RedBeat scheduler backend
 - Added `redbeat_distributed_lock.rs` example demonstrating distributed locking usage
+- Added rate limiting protection to prevent rapid-fire task scheduling (minimum 100ms interval between task dispatches)
 
 ### Fixed
 
 - Fixed compilation errors in `redbeat_app.rs` example
 - Fixed clippy warning about `&Box<T>` usage in scheduler backend
 - Fixed code formatting issues in `redbeat_distributed_lock.rs`
+- Fixed lock ownership verification in `release_task_lock` method to prevent unauthorized lock releases
+- Fixed lock leakage by properly releasing locks after task dispatch
 ### Changed
 
 - Updated GitHub Actions to latest versions to resolve deprecation warnings

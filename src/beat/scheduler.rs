@@ -1,10 +1,11 @@
 use super::{scheduled_task::ScheduledTask, Schedule};
 use crate::{broker::Broker, error::BeatError, protocol::TryCreateMessage};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime};
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
+const MIN_TASK_INTERVAL: Duration = Duration::from_millis(500); // Minimum interval between task dispatches
 
 /// A [`Scheduler`] is in charge of executing scheduled tasks when they are due.
 ///
@@ -19,6 +20,7 @@ pub struct Scheduler {
     default_sleep_interval: Duration,
     pub broker: Box<dyn Broker>,
     redbeat_backend: Option<Box<dyn RedBeatLock>>,
+    last_task_sent_at: Option<SystemTime>,
 }
 
 /// Trait for distributed locking in Beat scheduler
@@ -36,6 +38,7 @@ impl Scheduler {
             default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
             broker,
             redbeat_backend: None,
+            last_task_sent_at: None,
         }
     }
 
@@ -49,6 +52,7 @@ impl Scheduler {
             default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
             broker,
             redbeat_backend: Some(redbeat_backend),
+            last_task_sent_at: None,
         }
     }
 
@@ -109,6 +113,20 @@ impl Scheduler {
     /// It returns the time by which `tick` should be called again.
     pub async fn tick(&mut self) -> Result<SystemTime, BeatError> {
         let now = SystemTime::now();
+
+        // Check if we need to wait before sending another task to prevent rapid-fire scheduling
+        if let Some(last_sent) = self.last_task_sent_at {
+            let elapsed = now.duration_since(last_sent).unwrap_or(Duration::ZERO);
+            if elapsed < MIN_TASK_INTERVAL {
+                let wait_time = MIN_TASK_INTERVAL - elapsed;
+                debug!(
+                    "Rate limiting: waiting {:?} before next task dispatch",
+                    wait_time
+                );
+                return Ok(now + wait_time);
+            }
+        }
+
         let next_task_time = self.next_task_time(now);
 
         if next_task_time <= now {
@@ -117,6 +135,11 @@ impl Scheduler {
                 .pop()
                 .expect("No scheduled tasks found even though there should be");
             let result = self.send_scheduled_task(&mut scheduled_task).await;
+
+            // Update last task sent time
+            if result.is_ok() {
+                self.last_task_sent_at = Some(now);
+            }
 
             // Reschedule the task before checking if the task execution was successful.
             // TODO: we may have more fine-grained logic here and reschedule the task
@@ -128,7 +151,11 @@ impl Scheduler {
             }
 
             result?;
-            Ok(self.next_task_time(now))
+
+            // Ensure minimum interval before next task
+            let next_allowed_time = now + MIN_TASK_INTERVAL;
+            let next_task_time = self.next_task_time(now);
+            Ok(std::cmp::max(next_task_time, next_allowed_time))
         } else {
             Ok(next_task_time)
         }
@@ -139,31 +166,47 @@ impl Scheduler {
         &self,
         scheduled_task: &mut ScheduledTask,
     ) -> Result<(), BeatError> {
-        let queue = &scheduled_task.queue;
-        let task_name = &scheduled_task.name;
+        let task_name = scheduled_task.name.clone();
 
         // Try to acquire distributed lock for this task
-        if let Some(redbeat_backend) = self.get_redbeat_backend() {
-            if !redbeat_backend.try_acquire_task_lock(task_name).await? {
+        let acquired_lock = if let Some(redbeat_backend) = self.get_redbeat_backend() {
+            if !redbeat_backend.try_acquire_task_lock(&task_name).await? {
                 debug!(
                     "Task {} is already running on another instance, skipping",
                     task_name
                 );
                 return Ok(());
             }
+            true
+        } else {
+            false
+        };
+
+        // Send the task
+        let result = {
+            let message = scheduled_task.message_factory.try_create_message()?;
+
+            info!(
+                "Sending task {}[{}] to {} queue",
+                scheduled_task.name,
+                message.task_id(),
+                &scheduled_task.queue
+            );
+            self.broker.send(&message, &scheduled_task.queue).await?;
+            scheduled_task.last_run_at.replace(SystemTime::now());
+            scheduled_task.total_run_count += 1;
+            Ok(())
+        };
+
+        // Release the lock if we acquired it
+        if acquired_lock {
+            if let Some(redbeat_backend) = self.get_redbeat_backend() {
+                if let Err(e) = redbeat_backend.release_task_lock(&task_name).await {
+                    warn!("Failed to release lock for task {}: {}", task_name, e);
+                }
+            }
         }
 
-        let message = scheduled_task.message_factory.try_create_message()?;
-
-        info!(
-            "Sending task {}[{}] to {} queue",
-            scheduled_task.name,
-            message.task_id(),
-            queue
-        );
-        self.broker.send(&message, queue).await?;
-        scheduled_task.last_run_at.replace(SystemTime::now());
-        scheduled_task.total_run_count += 1;
-        Ok(())
+        result
     }
 }

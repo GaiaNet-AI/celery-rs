@@ -95,10 +95,34 @@ impl RedBeatLock for RedBeatSchedulerBackend {
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
         let lock_key = format!("redbeat:task_lock:{}", task_name);
-        let _: () = conn
-            .del(&lock_key)
+        let hostname = hostname::get()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let expected_value = format!("{}:{}", hostname, std::process::id());
+
+        // Use Lua script to atomically check and delete the lock
+        let script = r#"
+            if redis.call("GET", KEYS[1]) == ARGV[1] then
+                return redis.call("DEL", KEYS[1])
+            else
+                return 0
+            end
+        "#;
+
+        let result: i32 = redis::Script::new(script)
+            .key(&lock_key)
+            .arg(&expected_value)
+            .invoke_async(&mut conn)
             .await
             .map_err(|e| BeatError::RedisError(format!("Failed to release task lock: {}", e)))?;
+
+        if result == 0 {
+            return Err(BeatError::RedisError(format!(
+                "Lock for task {} is not owned by this process",
+                task_name
+            )));
+        }
 
         Ok(())
     }
