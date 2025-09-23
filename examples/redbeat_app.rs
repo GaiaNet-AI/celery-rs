@@ -26,11 +26,11 @@ async fn main() -> Result<()> {
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
 
     // Create RedBeat scheduler backend
-    let redbeat_backend = RedBeatSchedulerBackend::new(redis_url)?;
+    let redbeat_backend = RedBeatSchedulerBackend::new(redis_url.clone())?;
 
     // Build a `Beat` with RedBeat scheduler backend (equivalent to Python's redbeat.RedBeatScheduler)
     let mut beat = celery::beat!(
-        broker = RedisBroker { std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into()) },
+        broker = RedisBroker { redis_url },
         scheduler_backend = RedBeatSchedulerBackend { redbeat_backend },
         tasks = [
             "add_numbers" => {
@@ -47,7 +47,8 @@ async fn main() -> Result<()> {
         task_routes = [
             "*" => QUEUE_NAME,
         ],
-    ).await?;
+    )
+    .await?;
 
     println!("Starting RedBeat scheduler (equivalent to Python's redbeat.RedBeatScheduler)");
     beat.start().await?;
