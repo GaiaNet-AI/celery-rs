@@ -64,7 +64,7 @@ async fn test_task_with_delta_schedule() {
 
     // Check that the tasks have been executed the correct number of times.
     assert!(
-        tasks.len() >= 1,
+        !tasks.is_empty(),
         "Expected at least 1 task, got {}. This test is time-sensitive, there may be spurious failures",
         tasks.len()
     );
@@ -135,12 +135,12 @@ async fn test_scheduling_two_tasks() {
 
     // Check that the tasks have been executed the correct number of times.
     assert!(
-        task1.len() >= 1,
+        !task1.is_empty(),
         "Expected at least 1 task1, got {}. This test is time-sensitive, there may be spurious failures",
         task1.len()
     );
     assert!(
-        task2.len() >= 1,
+        !task2.is_empty(),
         "Expected at least 1 task2, got {}. This test is time-sensitive, there may be spurious failures",
         task2.len()
     );
