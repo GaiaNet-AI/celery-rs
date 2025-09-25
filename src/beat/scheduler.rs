@@ -49,6 +49,33 @@ impl Scheduler {
         Ok(())
     }
 
+    /// Schedule the execution of a task with cron expression.
+    pub fn schedule_task_with_cron<S>(
+        &mut self,
+        name: String,
+        message_factory: Box<dyn TryCreateMessage>,
+        queue: String,
+        schedule: S,
+        cron_expression: String,
+    ) where
+        S: Schedule + 'static,
+    {
+        match schedule.next_call_at(None) {
+            Some(next_call_at) => self.heap.push(ScheduledTask::new_with_cron(
+                name,
+                message_factory,
+                queue,
+                schedule,
+                next_call_at,
+                cron_expression,
+            )),
+            None => debug!(
+                "The schedule of task {} never scheduled the task to run, so it has been dropped.",
+                name
+            ),
+        }
+    }
+
     /// Schedule the execution of a task.
     pub fn schedule_task<S>(
         &mut self,

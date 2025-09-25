@@ -285,6 +285,35 @@ where
         self.schedule_named_task(Signature::<T>::task_name().to_string(), signature, schedule);
     }
 
+    /// Schedule the execution of a task with cron expression.
+    pub fn schedule_named_task_with_cron<T, S>(
+        &mut self,
+        name: String,
+        mut signature: Signature<T>,
+        schedule: S,
+        cron_expression: String,
+    ) where
+        T: Task + Clone + 'static,
+        S: Schedule + 'static,
+    {
+        signature.options.update(&self.task_options);
+        let queue = match &signature.queue {
+            Some(queue) => queue.to_string(),
+            None => routing::route(T::NAME, &self.task_routes)
+                .unwrap_or(&self.default_queue)
+                .to_string(),
+        };
+        let message_factory = Box::new(signature);
+
+        self.scheduler.schedule_task_with_cron(
+            name,
+            message_factory,
+            queue,
+            schedule,
+            cron_expression,
+        );
+    }
+
     /// Schedule the execution of a task with the given `name`.
     pub fn schedule_named_task<T, S>(
         &mut self,
@@ -461,12 +490,12 @@ where
             let now = SystemTime::now();
 
             // next_tick_at格式化后输出
-            log::info!(
-                "Next tick at {}, sleeping for {:?}",
-                chrono::DateTime::<chrono::Utc>::from(next_tick_at)
-                    .format("%Y-%m-%dT%H:%M:%S%.3fZ"),
-                next_tick_at.duration_since(now).unwrap_or_default()
-            );
+            // log::info!(
+            //     "Next tick at {}, sleeping for {:?}",
+            //     chrono::DateTime::<chrono::Utc>::from(next_tick_at)
+            //         .format("%Y-%m-%dT%H:%M:%S%.3fZ"),
+            //     next_tick_at.duration_since(now).unwrap_or_default()
+            // );
 
             if now < next_tick_at {
                 let sleep_interval = next_tick_at.duration_since(now).expect(

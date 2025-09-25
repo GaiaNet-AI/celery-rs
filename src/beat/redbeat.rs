@@ -126,38 +126,36 @@ impl RedBeatSchedulerEntry {
         now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() + interval.as_secs()
     }
 
-    /// Calculate next run time based on current state
-    pub fn calculate_next_run_time(&self) -> Option<u64> {
-        match self.last_run_at {
-            None => {
-                // First execution: calculate next execution time (don't execute immediately)
-                Some(self.calculate_next_run_time_from_now())
-            }
-            Some(last_run) => {
-                // 后续执行：基于上次执行时间计算下次执行时间
-                let last_run_time = UNIX_EPOCH + Duration::from_secs(last_run);
+    /// Calculate next run time using cron schedule string
+    pub fn calculate_next_run_time_from_cron(&self, last_run_at: Option<u64>) -> Option<u64> {
+        let base_time = match last_run_at {
+            Some(last_run) => UNIX_EPOCH + Duration::from_secs(last_run),
+            None => SystemTime::now(),
+        };
 
-                // For cron expressions, use CronSchedule parsing
-                if self.schedule.contains("*") && self.schedule.contains(" ") {
-                    if let Ok(cron_schedule) =
-                        super::schedule::CronSchedule::from_string(&self.schedule)
-                    {
-                        if let Some(next_time) = cron_schedule.next_call_at(Some(last_run_time)) {
-                            return Some(
-                                next_time
-                                    .duration_since(UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs(),
-                            );
-                        }
-                    }
+        // For cron expressions, use CronSchedule parsing
+        if self.schedule.contains("*") && self.schedule.contains(" ") {
+            if let Ok(cron_schedule) = super::schedule::CronSchedule::from_string(&self.schedule) {
+                if let Some(next_time) = cron_schedule.next_call_at(Some(base_time)) {
+                    return Some(
+                        next_time
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    );
                 }
-
-                // 间隔模式：简单加上间隔时间
-                let interval = self.parse_schedule_interval();
-                Some(last_run + interval.as_secs())
             }
         }
+
+        // Fallback to interval calculation
+        let interval = self.parse_schedule_interval();
+        Some(
+            base_time
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                + interval.as_secs(),
+        )
     }
 }
 
@@ -409,7 +407,7 @@ impl RedBeatScheduler {
 
                 updated_entry.last_run_at = Some(now_timestamp);
                 updated_entry.total_run_count += 1;
-                updated_entry.next_run_time = updated_entry.calculate_next_run_time();
+                updated_entry.next_run_time = updated_entry.calculate_next_run_time_from_cron(Some(now_timestamp));
 
                 log::info!(
                     "👑 Task {} executed, next_run_time: {:?}",
@@ -612,7 +610,8 @@ impl RedBeatScheduler {
                 // Update task metadata
                 entry.last_run_at = Some(now);
                 entry.total_run_count += 1;
-                entry.next_run_time = entry.calculate_next_run_time();
+                // Use cron schedule string to calculate next run time
+                entry.next_run_time = entry.calculate_next_run_time_from_cron(Some(now));
 
                 log::info!(
                     "👑 Task {} executed, next_run_time: {:?} ({})",
@@ -825,7 +824,7 @@ impl RedBeatScheduler {
         } else {
             // New task: correctly initialize meta information
             let next_run_time = entry
-                .calculate_next_run_time()
+                .calculate_next_run_time_from_cron(None)
                 .unwrap_or_else(|| entry.calculate_next_run_time_from_now());
 
             let meta = serde_json::json!({
@@ -916,28 +915,24 @@ impl RedBeatScheduler {
                 continue;
             }
 
-            // 从调度对象推断 cron 表达式（简化版本）
-            let schedule_str = self.extract_schedule_from_task(task);
-            // let schedule_str = "*/1 * * * *".to_string(); // 临时使用每分钟执行
-
             // Extract task arguments
             let (args, kwargs) = self.extract_task_args(task);
 
-            // Create RedBeat entry, directly use original schedule object to calculate next execution time
+            // Create RedBeat entry using original schedule object for timing
             let mut entry = RedBeatSchedulerEntry {
                 name: task.name.clone(),
                 task: task.name.clone(),
                 args,
                 kwargs,
                 options: std::collections::HashMap::new(),
-                schedule: schedule_str, // Use inferred cron expression
+                schedule: self.extract_schedule_from_task(task), // Store as cron string for Redis compatibility
                 enabled: true,
                 last_run_at: None,
                 total_run_count: 0,
                 next_run_time: None,
             };
 
-            // Directly use original schedule object to calculate next execution time
+            // Use original schedule object to calculate accurate next execution time
             if let Some(next_time) = task.schedule.next_call_at(Some(SystemTime::now())) {
                 entry.next_run_time = Some(
                     next_time
@@ -999,48 +994,51 @@ impl RedBeatScheduler {
 
     /// 从任务对象提取调度信息
     fn extract_schedule_from_task(&self, task: &ScheduledTask) -> String {
-        // 使用当前时间获取下次执行时间
+        // Use stored cron expression if available
+        if let Some(ref cron_expr) = task.cron_expression {
+            log::info!("Task {} using stored cron expression: {}", task.name, cron_expr);
+            return cron_expr.clone();
+        }
+
+        // Fallback to interval analysis
         let now = SystemTime::now();
-
         if let Some(first_call) = task.schedule.next_call_at(Some(now)) {
-            // Get second call time after first call + 1 minute to calculate interval
-            // let after_first = first_call + Duration::from_secs(61);
-
-            if let Some(second_call) = task.schedule.next_call_at(Some(first_call)) {
-                log::info!(
-                    "Extracting schedule for task {}: first_call {:?}, second_call {:?}",
-                    task.name,
-                    first_call,
-                    second_call
-                );
+            let after_first = first_call + Duration::from_millis(1);
+            if let Some(second_call) = task.schedule.next_call_at(Some(after_first)) {
                 if let Ok(interval) = second_call.duration_since(first_call) {
                     let interval_secs = interval.as_secs();
 
                     log::info!(
-                        "Extracted interval for task {}: first_call {:?}, second_call {:?}, {} seconds",
-                        task.name,
-                        first_call,
-                        second_call,
-                        interval_secs
+                        "Task {} schedule analysis: interval={}s",
+                        task.name, interval_secs
                     );
 
-                    // 根据间隔生成 cron 表达式
-                    if interval_secs >= 60 && interval_secs % 60 == 0 {
-                        let minutes = interval_secs / 60;
-                        if minutes == 1 {
-                            return "* * * * *".to_string(); // 每分钟
-                        } else {
-                            return format!("*/{} * * * *", minutes); // 每N分钟
-                        }
-                    } else {
-                        return format!("{}s", interval_secs); // 秒级间隔
+                    if interval_secs > 0 {
+                        return match interval_secs {
+                            60 => "*/1 * * * *".to_string(),
+                            n if n >= 120 && n <= 3540 && n % 60 == 0 => {
+                                format!("*/{} * * * *", n / 60)
+                            }
+                            3600 => "0 * * * *".to_string(),
+                            n if n >= 7200 && n <= 82800 && n % 3600 == 0 => {
+                                format!("0 */{} * * *", n / 3600)
+                            }
+                            86400 => "0 0 * * *".to_string(),
+                            n if n >= 172800 && n <= 604800 && n % 86400 == 0 => {
+                                format!("0 0 */{} * *", n / 86400)
+                            }
+                            604800 => "0 0 * * 0".to_string(),
+                            n if n < 60 => format!("{}s", n),
+                            _ => format!("{}s", interval_secs),
+                        };
                     }
                 }
             }
         }
 
-        // 默认值
-        "30s".to_string()
+        // Default fallback
+        log::info!("Task {} using default schedule: */1 * * * *", task.name);
+        "*/1 * * * *".to_string()
     }
 
     /// 从任务对象提取参数
