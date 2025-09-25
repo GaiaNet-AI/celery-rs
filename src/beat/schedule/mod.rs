@@ -39,7 +39,10 @@ impl Schedule for DeltaSchedule {
                     .checked_add(self.interval)
                     .expect("Invalid SystemTime encountered"),
             ),
-            None => Some(SystemTime::now()),
+            None => {
+                // First time: schedule for future execution, not immediate
+                Some(SystemTime::now().checked_add(self.interval).expect("Invalid SystemTime encountered"))
+            }
         }
     }
 }

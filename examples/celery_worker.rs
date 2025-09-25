@@ -9,7 +9,14 @@ use tokio::time::{self, Duration};
 // This generates the task struct and impl with the name set to the function name "add"
 #[celery::task]
 fn add(x: i32, y: i32) -> TaskResult<i32> {
+    println!("🧮 Worker executing add({}, {}) = {}", x, y, x + y);
     Ok(x + y)
+}
+
+#[celery::task]
+fn multiply(x: i32, y: i32) -> TaskResult<i32> {
+    println!("✖️  Worker executing multiply({}, {}) = {}", x, y, x * y);
+    Ok(x * y)
 }
 
 // Demonstrates a task that raises an error, and also how to customize task options.
@@ -66,9 +73,10 @@ async fn main() -> Result<()> {
         // broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672".into()) },
         tasks = [
             add,
-            buggy_task,
-            long_running_task,
-            bound_task,
+            // multiply,
+            // buggy_task,
+            // long_running_task,
+            // bound_task,
         ],
         // This just shows how we can route certain tasks to certain queues based
         // on glob matching.

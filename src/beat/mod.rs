@@ -38,9 +38,13 @@ mod scheduler;
 pub use scheduler::Scheduler;
 
 mod backend;
-pub use backend::{LocalSchedulerBackend, RedBeatSchedulerBackend, SchedulerBackend};
+pub use backend::{LocalSchedulerBackend, SchedulerBackend};
 
 mod redbeat;
+pub use redbeat::{RedBeatScheduler, RedBeatSchedulerEntry};
+
+mod distributed;
+pub use distributed::{DistributedSchedulerBackend, DistributedSchedulerCoordinator};
 
 mod schedule;
 pub use schedule::{CronSchedule, DeltaSchedule, Schedule};
@@ -200,12 +204,21 @@ where
         )
         .await?;
 
-        // Check if scheduler backend supports RedBeat distributed locking
-        let scheduler = if let Some(redbeat_backend) = self.scheduler_backend.as_redbeat_lock() {
-            Scheduler::new_with_redbeat(broker, redbeat_backend)
+        // Create scheduler - use RedBeat if backend is RedBeatScheduler
+        let mut scheduler = if std::any::type_name::<Sb>().contains("RedBeatScheduler") {
+            // Extract RedBeat scheduler from backend and create scheduler with it
+            let redbeat = unsafe {
+                let ptr =
+                    &self.scheduler_backend as *const Sb as *const crate::beat::RedBeatScheduler;
+                (*ptr).clone()
+            };
+            Scheduler::new_with_redbeat(broker, redbeat)
         } else {
             Scheduler::new(broker)
         };
+
+        // Initialize scheduler
+        scheduler.setup_schedule().await?;
 
         Ok(Beat {
             name: self.config.name,
@@ -298,6 +311,79 @@ where
     /// Start the *beat*.
     pub async fn start(&mut self) -> Result<(), BeatError> {
         info!("Starting beat service");
+
+        // Set up signal handling for RedBeat cleanup
+        let is_redbeat = std::any::type_name::<Sb>().contains("RedBeatScheduler");
+        if is_redbeat {
+            self.start_with_signal_handling().await
+        } else {
+            self.start_without_signal_handling().await
+        }
+    }
+
+    /// Start beat service with signal handling (for RedBeat)
+    async fn start_with_signal_handling(&mut self) -> Result<(), BeatError> {
+        use tokio::select;
+
+        select! {
+            result = self.beat_loop_with_reconnect() => {
+                result
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received Ctrl+C, cleaning up...");
+                self.cleanup_on_shutdown().await;
+                Ok(())
+            }
+        }
+    }
+
+    /// Start beat service without signal handling (for other schedulers)
+    async fn start_without_signal_handling(&mut self) -> Result<(), BeatError> {
+        self.beat_loop_with_reconnect().await
+    }
+
+    /// Cleanup on shutdown (for RedBeat)
+    async fn cleanup_on_shutdown(&mut self) {
+        info!("🧹 Cleaning up RedBeat resources...");
+
+        // Try to release lock from scheduler's RedBeat instance first
+        if let Some(redbeat) = self.scheduler.get_redbeat_scheduler_mut() {
+            info!("🔓 Releasing RedBeat lock from scheduler...");
+            if let Err(e) = redbeat.release_lock().await {
+                error!("Failed to release RedBeat lock from scheduler: {}", e);
+            } else {
+                info!("✅ RedBeat lock released successfully from scheduler");
+                return;
+            }
+        }
+
+        // Fallback to scheduler backend
+        if let Some(redbeat) = self.scheduler_backend_as_redbeat_mut() {
+            info!("🔓 Releasing RedBeat lock from backend...");
+            if let Err(e) = redbeat.release_lock().await {
+                error!("Failed to release RedBeat lock from backend: {}", e);
+            } else {
+                info!("✅ RedBeat lock released successfully from backend");
+            }
+        }
+    }
+
+    /// Try to cast scheduler backend to RedBeatScheduler (unsafe but necessary)
+    fn scheduler_backend_as_redbeat_mut(&mut self) -> Option<&mut crate::beat::RedBeatScheduler> {
+        // This is unsafe but necessary due to type erasure
+        // We only call this when we know it's a RedBeatScheduler
+        unsafe {
+            let ptr = &mut self.scheduler_backend as *mut Sb as *mut crate::beat::RedBeatScheduler;
+            if std::any::type_name::<Sb>().contains("RedBeatScheduler") {
+                Some(&mut *ptr)
+            } else {
+                None
+            }
+        }
+    }
+
+    /// Beat loop with reconnection logic
+    async fn beat_loop_with_reconnect(&mut self) -> Result<(), BeatError> {
         loop {
             let result = self.beat_loop().await;
             if !self.broker_connection_retry {
@@ -358,11 +444,30 @@ where
             let next_tick_at = self.scheduler.tick().await?;
 
             if self.scheduler_backend.should_sync() {
+                let was_empty = self.scheduler.get_scheduled_tasks().is_empty();
+
                 self.scheduler_backend
                     .sync(self.scheduler.get_scheduled_tasks())?;
+
+                // If tasks were cleared and we might be a new leader, check if we need to repopulate
+                let is_empty_now = self.scheduler.get_scheduled_tasks().is_empty();
+                if !was_empty && is_empty_now {
+                    log::debug!("Tasks were cleared - likely became follower");
+                } else if was_empty && !is_empty_now {
+                    log::info!("Tasks were repopulated - likely became leader");
+                }
             }
 
             let now = SystemTime::now();
+
+            // next_tick_at格式化后输出
+            log::info!(
+                "Next tick at {}, sleeping for {:?}",
+                chrono::DateTime::<chrono::Utc>::from(next_tick_at)
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ"),
+                next_tick_at.duration_since(now).unwrap_or_default()
+            );
+
             if now < next_tick_at {
                 let sleep_interval = next_tick_at.duration_since(now).expect(
                     "Unexpected error when unwrapping a SystemTime comparison that is not supposed to fail",
@@ -371,7 +476,7 @@ where
                     Some(max_sleep_duration) => std::cmp::min(sleep_interval, *max_sleep_duration),
                     None => sleep_interval,
                 };
-                debug!("Now sleeping for {:?}", sleep_interval);
+                log::trace!("Now sleeping for {:?}", sleep_interval);
                 time::sleep(sleep_interval).await;
             }
         }

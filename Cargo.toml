@@ -21,7 +21,7 @@ name = "celery"
 path = "src/lib.rs"
 
 [[example]]
-name = "celery_app"
+name = "celery_worker"
 
 [dependencies]
 base64 = "0.22.1"
@@ -46,7 +46,7 @@ colored = "3.0.0"
 once_cell = { version = "1.21.3" }
 globset = "0.4.16"
 hostname = "0.4.1"
-redis = { version = "0.32.5", features=["connection-manager", "tokio-comp"] }
+redis = { version = "0.32.5", features=["connection-manager", "tokio-comp", "script"] }
 deadpool-redis = { version = "0.22.0", features = ["rt_tokio_1"] }
 tokio-executor-trait = "3.1.0"
 tokio-reactor-trait = "2.8.0"
