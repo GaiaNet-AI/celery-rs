@@ -84,8 +84,8 @@ async fn main() -> anyhow::Result<()> {
         "dynamic" => start_with_dynamic_scheduling().await,
         _ => {
             println!("Usage: cargo run --example celery_redbeat [macro|dynamic]");
-            println!("  macro   - 方法1：在 beat 宏的 tasks 中定义调度");
-            println!("  dynamic - 方法2：使用 schedule_named_task_cron 动态添加");
+            println!("  macro   - Method 1: Define scheduling in beat macro tasks");
+            println!("  dynamic - Method 2: Use schedule_named_task_cron to add dynamically");
             println!("\nExamples:");
             println!("  cargo run --example celery_redbeat macro");
             println!("  cargo run --example celery_redbeat dynamic");

@@ -379,7 +379,13 @@ where
         let message_factory = Box::new(signature);
 
         // Use the scheduler's schedule_task_with_cron method if available
-        self.scheduler.schedule_task_with_cron(name, message_factory, queue, schedule, cron_expr.to_string());
+        self.scheduler.schedule_task_with_cron(
+            name,
+            message_factory,
+            queue,
+            schedule,
+            cron_expr.to_string(),
+        );
     }
 
     /// Start the *beat*.

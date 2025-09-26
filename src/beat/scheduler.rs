@@ -153,7 +153,7 @@ impl Scheduler {
             message.task_id(),
             &scheduled_task.queue
         );
-        
+
         self.broker.send(&message, &scheduled_task.queue).await?;
         scheduled_task.last_run_at.replace(SystemTime::now());
         scheduled_task.total_run_count += 1;

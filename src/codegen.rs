@@ -96,9 +96,9 @@ macro_rules! __beat_internal {
 
             $(
                 beat.schedule_named_task_with_cron(
-                    $task_name.to_string(), 
-                    <$task_type>::new( $( $task_arg ),* ), 
-                    $crate::beat::CronSchedule::from_string($schedule_expr)?, 
+                    $task_name.to_string(),
+                    <$task_type>::new( $( $task_arg ),* ),
+                    $crate::beat::CronSchedule::from_string($schedule_expr)?,
                     $schedule_expr.to_string()
                 );
             )*
