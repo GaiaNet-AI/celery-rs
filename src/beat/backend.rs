@@ -37,6 +37,3 @@ impl SchedulerBackend for LocalSchedulerBackend {
         Ok(())
     }
 }
-
-// Re-export RedBeat scheduler
-pub use super::redbeat::RedBeatScheduler;

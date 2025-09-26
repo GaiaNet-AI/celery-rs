@@ -4,14 +4,14 @@
 use super::backend::SchedulerBackend;
 use super::scheduled_task::ScheduledTask;
 use super::Schedule;
-use crate::beat::schedule;
 use crate::error::BeatError;
+use base64::Engine;
 use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::collections::{BinaryHeap, HashMap};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const DEFAULT_MAX_INTERVAL: u64 = 300; // 5 minutes
+// const DEFAULT_MAX_INTERVAL: u64 = 300; // 5 minutes
 const LOCK_TIMEOUT: u64 = 60; // 60 seconds lock timeout, balancing stability and recovery speed
 const FOLLOWER_CHECK_INTERVAL: Duration = Duration::from_secs(30); // Follower check interval
 
@@ -44,11 +44,6 @@ impl RedBeatSchedulerEntry {
                 self.calculate_next_run_time_from_now() as f64
             }
         }
-    }
-
-    fn next_run_time(&self, last_run: SystemTime) -> SystemTime {
-        let interval = self.parse_schedule_interval();
-        last_run + interval
     }
 
     fn parse_schedule_interval(&self) -> Duration {
@@ -171,7 +166,7 @@ pub struct RedBeatScheduler {
     instance_id: String,
     is_leader: bool,
     last_leader_check: SystemTime,
-    max_interval: Duration,
+    // max_interval: Duration,
     follower_check_interval: Duration,
     tasks_synced_to_redis: bool,
 }
@@ -203,7 +198,7 @@ impl RedBeatScheduler {
             instance_id,
             is_leader: false,
             last_leader_check: UNIX_EPOCH,
-            max_interval: Duration::from_secs(DEFAULT_MAX_INTERVAL),
+            // max_interval: Duration::from_secs(DEFAULT_MAX_INTERVAL),
             follower_check_interval: FOLLOWER_CHECK_INTERVAL,
             tasks_synced_to_redis: false,
         })
@@ -356,7 +351,32 @@ impl RedBeatScheduler {
                         log::info!("🔒 Lock renewed successfully by background task");
                     }
                     Ok(0i32) => {
-                        log::warn!("🔒 Background lock renewal failed - lost leadership");
+                        // 诊断锁失败的具体原因
+                        let diagnosis_result = rt.block_on(async {
+                            match redis_client.get_multiplexed_async_connection().await {
+                                Ok(mut conn) => {
+                                    let current_lock: Option<String> = redis::cmd("GET")
+                                        .arg(&lock_key)
+                                        .query_async(&mut conn)
+                                        .await
+                                        .unwrap_or(None);
+
+                                    match current_lock {
+                                        None => "Lock expired or deleted".to_string(),
+                                        Some(owner) if owner != instance_id => {
+                                            format!("Lock taken by another instance: {}", owner)
+                                        }
+                                        Some(_) => "Unexpected renewal failure".to_string(),
+                                    }
+                                }
+                                Err(_) => "Redis connection failed during diagnosis".to_string(),
+                            }
+                        });
+
+                        log::warn!(
+                            "🔒 Background lock renewal failed - lost leadership: {}",
+                            diagnosis_result
+                        );
                         break; // Exit renewal loop
                     }
                     Ok(other) => {
@@ -372,57 +392,6 @@ impl RedBeatScheduler {
         Ok(())
     }
 
-    /// Lose leadership (lock was taken by another instance)
-    fn lose_leadership(&mut self) {
-        if self.is_leader {
-            self.is_leader = false;
-            log::warn!("❌ Lost LEADERSHIP: {}", self.instance_id);
-        }
-    }
-
-    /// Execute tasks as leader (simplified version of tick logic)
-    async fn execute_leader_tasks(&mut self) -> Result<(), BeatError> {
-        // 获取到期的任务
-        let schedule = self.get_schedule().await?;
-
-        // 执行到期的任务
-        for (name, entry) in schedule {
-            let (is_due, _) = entry.is_due();
-
-            if is_due {
-                log::info!("👑 LEADER executing task: {} ({})", name, entry.task);
-
-                // 执行任务
-                if let Err(e) = self.execute_task(&entry).await {
-                    log::error!("Failed to execute task {}: {}", name, e);
-                    continue;
-                }
-
-                // 更新任务状态
-                let mut updated_entry = entry.clone();
-                let now_timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                updated_entry.last_run_at = Some(now_timestamp);
-                updated_entry.total_run_count += 1;
-                updated_entry.next_run_time = updated_entry.calculate_next_run_time_from_cron(Some(now_timestamp));
-
-                log::info!(
-                    "👑 Task {} executed, next_run_time: {:?}",
-                    name,
-                    updated_entry.next_run_time
-                );
-
-                if let Err(e) = self.update_task_meta(&updated_entry).await {
-                    log::error!("Failed to update task metadata: {}", e);
-                }
-            }
-        }
-
-        Ok(())
-    }
     async fn get_schedule(&self) -> Result<HashMap<String, RedBeatSchedulerEntry>, BeatError> {
         let mut conn = self
             .redis_client
@@ -685,7 +654,8 @@ impl RedBeatScheduler {
         ]);
 
         let message = serde_json::json!({
-            "body": base64::encode(task_body.to_string()),
+            // "body": base64::encode(task_body.to_string()),
+            "body": base64::engine::general_purpose::STANDARD.encode(task_body.to_string()),
             "content-encoding": "utf-8",
             "content-type": "application/json",
             "headers": {
@@ -963,7 +933,7 @@ impl RedBeatScheduler {
                             instance_id: "sync".to_string(),
                             is_leader: false,
                             last_leader_check: UNIX_EPOCH,
-                            max_interval: Duration::from_secs(300),
+                            // max_interval: Duration::from_secs(300),
                             follower_check_interval: Duration::from_secs(30),
                             tasks_synced_to_redis: true,
                         };
@@ -996,7 +966,11 @@ impl RedBeatScheduler {
     fn extract_schedule_from_task(&self, task: &ScheduledTask) -> String {
         // Use stored cron expression if available
         if let Some(ref cron_expr) = task.cron_expression {
-            log::info!("Task {} using stored cron expression: {}", task.name, cron_expr);
+            log::info!(
+                "Task {} using stored cron expression: {}",
+                task.name,
+                cron_expr
+            );
             return cron_expr.clone();
         }
 
@@ -1010,7 +984,8 @@ impl RedBeatScheduler {
 
                     log::info!(
                         "Task {} schedule analysis: interval={}s",
-                        task.name, interval_secs
+                        task.name,
+                        interval_secs
                     );
 
                     if interval_secs > 0 {
@@ -1075,9 +1050,6 @@ impl RedBeatScheduler {
     }
 }
 
-// Remove Drop trait implementation to avoid accidental lock cleanup in sync method
-// Lock cleanup relies on TTL automatic expiration mechanism
-
 impl SchedulerBackend for RedBeatScheduler {
     fn should_sync(&self) -> bool {
         // Always sync for RedBeat to handle distributed logic, but make sync() lightweight after initialization
@@ -1122,53 +1094,53 @@ impl SchedulerBackend for RedBeatScheduler {
     }
 }
 
-// Control task implementations
-struct RedBeatControlMessageFactory;
-impl crate::protocol::TryCreateMessage for RedBeatControlMessageFactory {
-    fn try_create_message(&self) -> Result<crate::protocol::Message, crate::error::ProtocolError> {
-        // Create a dummy message that will never be executed
-        use crate::protocol::{DeliveryInfo, Message, MessageHeaders, MessageProperties};
+// // Control task implementations
+// struct RedBeatControlMessageFactory;
+// impl crate::protocol::TryCreateMessage for RedBeatControlMessageFactory {
+//     fn try_create_message(&self) -> Result<crate::protocol::Message, crate::error::ProtocolError> {
+//         // Create a dummy message that will never be executed
+//         use crate::protocol::{DeliveryInfo, Message, MessageHeaders, MessageProperties};
 
-        Ok(Message {
-            headers: MessageHeaders {
-                id: "redbeat-control".to_string(),
-                task: "redbeat_control".to_string(),
-                lang: None,
-                root_id: None,
-                parent_id: None,
-                group: None,
-                meth: None,
-                shadow: None,
-                eta: None,
-                expires: None,
-                retries: None,
-                timelimit: (None, None),
-                argsrepr: None,
-                kwargsrepr: None,
-                origin: Some("redbeat".to_string()),
-            },
-            properties: MessageProperties {
-                correlation_id: "redbeat-control".to_string(),
-                content_type: "application/json".to_string(),
-                content_encoding: "utf-8".to_string(),
-                reply_to: None,
-                delivery_info: Some(DeliveryInfo {
-                    exchange: "".to_string(),
-                    routing_key: "".to_string(), // Empty routing key - should not be routed anywhere
-                }),
-            },
-            raw_body: b"[]".to_vec(), // Empty JSON array
-        })
-    }
-}
+//         Ok(Message {
+//             headers: MessageHeaders {
+//                 id: "redbeat-control".to_string(),
+//                 task: "redbeat_control".to_string(),
+//                 lang: None,
+//                 root_id: None,
+//                 parent_id: None,
+//                 group: None,
+//                 meth: None,
+//                 shadow: None,
+//                 eta: None,
+//                 expires: None,
+//                 retries: None,
+//                 timelimit: (None, None),
+//                 argsrepr: None,
+//                 kwargsrepr: None,
+//                 origin: Some("redbeat".to_string()),
+//             },
+//             properties: MessageProperties {
+//                 correlation_id: "redbeat-control".to_string(),
+//                 content_type: "application/json".to_string(),
+//                 content_encoding: "utf-8".to_string(),
+//                 reply_to: None,
+//                 delivery_info: Some(DeliveryInfo {
+//                     exchange: "".to_string(),
+//                     routing_key: "".to_string(), // Empty routing key - should not be routed anywhere
+//                 }),
+//             },
+//             raw_body: b"[]".to_vec(), // Empty JSON array
+//         })
+//     }
+// }
 
-struct RedBeatControlSchedule {
-    next_time: SystemTime,
-}
+// struct RedBeatControlSchedule {
+//     next_time: SystemTime,
+// }
 
-impl super::Schedule for RedBeatControlSchedule {
-    fn next_call_at(&self, _last_run_at: Option<SystemTime>) -> Option<SystemTime> {
-        // Return the next sync time
-        Some(self.next_time)
-    }
-}
+// impl super::Schedule for RedBeatControlSchedule {
+//     fn next_call_at(&self, _last_run_at: Option<SystemTime>) -> Option<SystemTime> {
+//         // Return the next sync time
+//         Some(self.next_time)
+//     }
+// }

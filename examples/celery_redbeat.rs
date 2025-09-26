@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
             "add" => {
                 add,
                 args = (10, 20),
-                schedule = "5 */1 * * *"
+                schedule = "*/10 * * * *"
             },
         ],
         task_routes = [

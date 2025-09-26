@@ -1,20 +1,18 @@
 /// Distributed scheduler implementation based on RedBeat design
-/// 
+///
 /// This module provides multi-instance distributed scheduling capabilities
 /// using Redis for coordination and locking.
-
-use super::{scheduled_task::ScheduledTask, Schedule, SchedulerBackend};
+use super::{scheduled_task::ScheduledTask, SchedulerBackend};
 use crate::error::BeatError;
 use redis::{AsyncCommands, Client, RedisResult};
 use serde::{Deserialize, Serialize};
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 const SCHEDULER_LOCK_KEY: &str = "redbeat:scheduler_lock";
-const SCHEDULE_KEY: &str = "redbeat:schedule";
+// const SCHEDULE_KEY: &str = "redbeat:schedule";
 const LOCK_TTL: u64 = 10; // 10 seconds for faster failover
-const HEARTBEAT_INTERVAL: u64 = 10; // seconds
 
 /// Distributed scheduler entry stored in Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,7 +31,7 @@ pub struct DistributedScheduleEntry {
 pub struct DistributedSchedulerBackend {
     redis_client: Client,
     instance_id: String,
-    hostname: String,
+    // hostname: String,
     last_sync: SystemTime,
     sync_interval: Duration,
     is_leader: bool,
@@ -49,13 +47,13 @@ impl DistributedSchedulerBackend {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        
+
         let instance_id = format!("{}:{}", hostname, Uuid::new_v4());
 
         Ok(Self {
             redis_client,
             instance_id,
-            hostname,
+            // hostname,
             last_sync: UNIX_EPOCH,
             sync_interval: Duration::from_secs(5),
             is_leader: false,
@@ -65,11 +63,11 @@ impl DistributedSchedulerBackend {
     /// Try to acquire the scheduler leader lock
     async fn try_acquire_leader_lock(&mut self) -> Result<bool, BeatError> {
         log::debug!("🔐 Attempting to acquire leader lock...");
-        
+
         let mut conn = self.get_connection().await?;
-        
+
         log::debug!("🔗 Redis connection established");
-        
+
         let result: RedisResult<String> = conn
             .set_options(
                 SCHEDULER_LOCK_KEY,
@@ -82,7 +80,7 @@ impl DistributedSchedulerBackend {
 
         let acquired = result.is_ok();
         self.is_leader = acquired;
-        
+
         if acquired {
             log::info!("👑 Acquired scheduler leader lock: {}", self.instance_id);
         } else {
@@ -93,36 +91,8 @@ impl DistributedSchedulerBackend {
                 log::debug!("🔒 Current lock holder: {}", holder);
             }
         }
-        
+
         Ok(acquired)
-    }
-
-    /// Renew the leader lock if we own it
-    async fn renew_leader_lock(&self) -> Result<bool, BeatError> {
-        if !self.is_leader {
-            return Ok(false);
-        }
-
-        let mut conn = self.get_connection().await?;
-        
-        // Use Lua script to atomically check and renew the lock
-        let script = r#"
-            if redis.call("GET", KEYS[1]) == ARGV[1] then
-                return redis.call("EXPIRE", KEYS[1], ARGV[2])
-            else
-                return 0
-            end
-        "#;
-
-        let result: i32 = redis::Script::new(script)
-            .key(SCHEDULER_LOCK_KEY)
-            .arg(&self.instance_id)
-            .arg(LOCK_TTL)
-            .invoke_async(&mut conn)
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to renew leader lock: {}", e)))?;
-
-        Ok(result == 1)
     }
 
     /// Get Redis connection
@@ -134,44 +104,6 @@ impl DistributedSchedulerBackend {
                 log::error!("Failed to get Redis connection: {}", e);
                 BeatError::RedisError(format!("Failed to get Redis connection: {}", e))
             })
-    }
-
-    /// Sync schedule from Redis
-    async fn sync_schedule_from_redis(&self) -> Result<HashMap<String, DistributedScheduleEntry>, BeatError> {
-        let mut conn = self.get_connection().await?;
-        
-        let entries: HashMap<String, String> = conn
-            .hgetall(SCHEDULE_KEY)
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to get schedule from Redis: {}", e)))?;
-
-        let mut schedule = HashMap::new();
-        for (name, data) in entries {
-            match serde_json::from_str::<DistributedScheduleEntry>(&data) {
-                Ok(entry) => {
-                    schedule.insert(name, entry);
-                }
-                Err(e) => {
-                    log::warn!("Failed to deserialize schedule entry {}: {}", name, e);
-                }
-            }
-        }
-
-        Ok(schedule)
-    }
-
-    /// Update schedule entry in Redis
-    async fn update_schedule_entry(&self, entry: &DistributedScheduleEntry) -> Result<(), BeatError> {
-        let mut conn = self.get_connection().await?;
-        
-        let data = serde_json::to_string(entry)
-            .map_err(|e| BeatError::RedisError(format!("Failed to serialize schedule entry: {}", e)))?;
-
-        let _: () = conn.hset(SCHEDULE_KEY, &entry.name, data)
-            .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to update schedule entry: {}", e)))?;
-
-        Ok(())
     }
 
     /// Check if this instance is the leader
@@ -196,7 +128,7 @@ impl DistributedSchedulerBackend {
         let redis_client = self.redis_client.clone();
         let instance_id = self.instance_id.clone();
         let mut current_leader_state = self.is_leader;
-        
+
         tokio::spawn(async move {
             loop {
                 let mut conn = match redis_client.get_multiplexed_async_connection().await {
@@ -210,7 +142,7 @@ impl DistributedSchedulerBackend {
 
                 // Check if we currently hold the lock
                 let current_holder: Result<String, _> = conn.get(SCHEDULER_LOCK_KEY).await;
-                
+
                 let is_leader = if let Ok(holder) = current_holder {
                     if holder == instance_id {
                         // We are the leader, renew the lock
@@ -234,7 +166,7 @@ impl DistributedSchedulerBackend {
                                 .with_expiration(redis::SetExpiry::EX(LOCK_TTL)),
                         )
                         .await;
-                    
+
                     if result.is_ok() {
                         log::info!("👑 Acquired leader lock in heartbeat: {}", instance_id);
                         true
@@ -242,7 +174,7 @@ impl DistributedSchedulerBackend {
                         false
                     }
                 };
-                
+
                 // Log state changes
                 if is_leader != current_leader_state {
                     current_leader_state = is_leader;
@@ -272,40 +204,6 @@ impl SchedulerBackend for DistributedSchedulerBackend {
     }
 }
 
-impl DistributedSchedulerBackend {
-    /// Check if this instance is currently the leader by examining Redis
-    fn check_leader_status(&self) -> bool {
-        // Try to acquire lock - if successful, we're the leader
-        let rt = tokio::runtime::Handle::try_current();
-        if let Ok(rt) = rt {
-            rt.block_on(async {
-                let mut conn = self.redis_client.get_multiplexed_async_connection().await.ok()?;
-                
-                // First check who holds the lock
-                let current_holder: Result<String, _> = conn.get(SCHEDULER_LOCK_KEY).await;
-                if let Ok(holder) = current_holder {
-                    return Some(holder == self.instance_id);
-                }
-                
-                // If no lock exists, try to acquire it
-                let result: RedisResult<String> = conn
-                    .set_options(
-                        SCHEDULER_LOCK_KEY,
-                        &self.instance_id,
-                        redis::SetOptions::default()
-                            .conditional_set(redis::ExistenceCheck::NX)
-                            .with_expiration(redis::SetExpiry::EX(LOCK_TTL)),
-                    )
-                    .await;
-                
-                Some(result.is_ok())
-            }).unwrap_or(false)
-        } else {
-            false
-        }
-    }
-}
-
 /// Distributed scheduler coordinator
 pub struct DistributedSchedulerCoordinator {
     backend: DistributedSchedulerBackend,
@@ -316,7 +214,7 @@ impl DistributedSchedulerCoordinator {
     /// Create a new distributed scheduler coordinator
     pub fn new(redis_url: String) -> Result<Self, BeatError> {
         let backend = DistributedSchedulerBackend::new(redis_url)?;
-        
+
         Ok(Self {
             backend,
             heartbeat_handle: None,
@@ -326,7 +224,7 @@ impl DistributedSchedulerCoordinator {
     /// Start the coordinator
     pub async fn start(&mut self) -> Result<(), BeatError> {
         log::info!("🚀 Starting distributed scheduler coordinator...");
-        
+
         // Try to acquire leader lock
         let acquired = self.backend.try_acquire_leader_lock().await?;
         if acquired {
@@ -334,11 +232,11 @@ impl DistributedSchedulerCoordinator {
         } else {
             log::info!("👥 Started as follower: {}", self.backend.instance_id);
         }
-        
+
         // Start heartbeat task
         let heartbeat_handle = self.backend.start_heartbeat().await;
         self.heartbeat_handle = Some(heartbeat_handle);
-        
+
         log::info!("💓 Heartbeat started for: {}", self.backend.instance_id);
         Ok(())
     }
@@ -348,8 +246,11 @@ impl DistributedSchedulerCoordinator {
         if let Some(handle) = self.heartbeat_handle.take() {
             handle.abort();
         }
-        
-        log::info!("Distributed scheduler coordinator stopped: {}", self.backend.instance_id);
+
+        log::info!(
+            "Distributed scheduler coordinator stopped: {}",
+            self.backend.instance_id
+        );
     }
 
     /// Get the backend for use with Beat
@@ -358,7 +259,7 @@ impl DistributedSchedulerCoordinator {
         self.backend.is_leader = self.backend.is_leader;
         self.backend.clone()
     }
-    
+
     /// Update backend leader state
     pub fn update_backend_state(&mut self, is_leader: bool) {
         self.backend.set_leader_state(is_leader);

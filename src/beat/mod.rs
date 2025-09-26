@@ -30,7 +30,7 @@ use crate::{
     protocol::MessageContentType,
     task::{Signature, Task, TaskOptions},
 };
-use log::{debug, error, info};
+use log::{error, info};
 use std::time::SystemTime;
 use tokio::time::{self, Duration};
 
