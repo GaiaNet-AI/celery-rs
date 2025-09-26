@@ -242,8 +242,6 @@ impl DistributedSchedulerCoordinator {
 
     /// Get the backend for use with Beat
     pub fn get_backend(&mut self) -> DistributedSchedulerBackend {
-        // Update backend with current leader state
-        self.backend.is_leader = self.backend.is_leader;
         self.backend.clone()
     }
 

@@ -590,7 +590,7 @@ impl RedBeatScheduler {
                         .next_run_time
                         .map(|t| {
                             chrono::DateTime::from_timestamp(t as i64, 0)
-                                .unwrap_or_else(|| chrono::Utc::now())
+                                .unwrap_or_else(chrono::Utc::now)
                                 .format("%Y-%m-%d %H:%M:%S UTC")
                                 .to_string()
                         })
@@ -991,15 +991,15 @@ impl RedBeatScheduler {
                     if interval_secs > 0 {
                         return match interval_secs {
                             60 => "*/1 * * * *".to_string(),
-                            n if n >= 120 && n <= 3540 && n % 60 == 0 => {
+                            n if (120..=3540).contains(&n) && n % 60 == 0 => {
                                 format!("*/{} * * * *", n / 60)
                             }
                             3600 => "0 * * * *".to_string(),
-                            n if n >= 7200 && n <= 82800 && n % 3600 == 0 => {
+                            n if (7200..=82800).contains(&n) && n % 3600 == 0 => {
                                 format!("0 */{} * * *", n / 3600)
                             }
                             86400 => "0 0 * * *".to_string(),
-                            n if n >= 172800 && n <= 604800 && n % 86400 == 0 => {
+                            n if (172800..=604800).contains(&n) && n % 86400 == 0 => {
                                 format!("0 0 */{} * *", n / 86400)
                             }
                             604800 => "0 0 * * 0".to_string(),
@@ -1024,26 +1024,23 @@ impl RedBeatScheduler {
         Vec<serde_json::Value>,
         std::collections::HashMap<String, serde_json::Value>,
     ) {
-        match task.message_factory.try_create_message() {
-            Ok(message) => {
-                if let Ok(body_str) = String::from_utf8(message.raw_body) {
-                    if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_str) {
-                        if let Some(array) = body_json.as_array() {
-                            if array.len() >= 2 {
-                                let args = array[0].as_array().cloned().unwrap_or_default();
-                                let kwargs = array[1]
-                                    .as_object()
-                                    .map(|obj| {
-                                        obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-                                    })
-                                    .unwrap_or_default();
-                                return (args, kwargs);
-                            }
+        if let Ok(message) = task.message_factory.try_create_message() {
+            if let Ok(body_str) = String::from_utf8(message.raw_body) {
+                if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                    if let Some(array) = body_json.as_array() {
+                        if array.len() >= 2 {
+                            let args = array[0].as_array().cloned().unwrap_or_default();
+                            let kwargs = array[1]
+                                .as_object()
+                                .map(|obj| {
+                                    obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                                })
+                                .unwrap_or_default();
+                            return (args, kwargs);
                         }
                     }
                 }
             }
-            Err(_) => {}
         }
 
         (vec![], std::collections::HashMap::new())
