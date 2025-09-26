@@ -18,6 +18,7 @@
 //! The main difference with the architecture used in Python is that in Python
 //! there is a base scheduler class which contains the scheduling logic, then different
 //! implementations use different strategies to synchronize the scheduler.
+//!
 //! Here instead we have only one scheduler struct, and the different backends
 //! correspond to the different scheduler implementations in Python.
 
@@ -51,6 +52,26 @@ pub use schedule::{CronSchedule, DeltaSchedule, Schedule};
 
 mod scheduled_task;
 pub use scheduled_task::ScheduledTask;
+
+/// Trait for types that can be converted to a Schedule
+pub trait IntoSchedule {
+    type Schedule: Schedule + 'static;
+    fn into_schedule(self) -> Result<Self::Schedule, crate::error::ScheduleError>;
+}
+
+impl<S: Schedule + 'static> IntoSchedule for S {
+    type Schedule = S;
+    fn into_schedule(self) -> Result<Self::Schedule, crate::error::ScheduleError> {
+        Ok(self)
+    }
+}
+
+impl IntoSchedule for &str {
+    type Schedule = CronSchedule<chrono::Utc>;
+    fn into_schedule(self) -> Result<Self::Schedule, crate::error::ScheduleError> {
+        CronSchedule::from_string(self)
+    }
+}
 
 struct Config {
     name: String,
@@ -322,8 +343,9 @@ where
         schedule: S,
     ) where
         T: Task + Clone + 'static,
-        S: Schedule + 'static,
+        S: IntoSchedule,
     {
+        let schedule = schedule.into_schedule().expect("Invalid schedule");
         signature.options.update(&self.task_options);
         let queue = match &signature.queue {
             Some(queue) => queue.to_string(),
@@ -335,6 +357,29 @@ where
 
         self.scheduler
             .schedule_task(name, message_factory, queue, schedule);
+    }
+
+    /// Schedule the execution of a task with cron string (preserves original expression).
+    pub fn schedule_named_task_cron<T>(
+        &mut self,
+        name: String,
+        mut signature: Signature<T>,
+        cron_expr: &str,
+    ) where
+        T: Task + Clone + 'static,
+    {
+        let schedule = CronSchedule::from_string(cron_expr).expect("Invalid cron expression");
+        signature.options.update(&self.task_options);
+        let queue = match &signature.queue {
+            Some(queue) => queue.to_string(),
+            None => routing::route(T::NAME, &self.task_routes)
+                .unwrap_or(&self.default_queue)
+                .to_string(),
+        };
+        let message_factory = Box::new(signature);
+
+        // Use the scheduler's schedule_task_with_cron method if available
+        self.scheduler.schedule_task_with_cron(name, message_factory, queue, schedule, cron_expr.to_string());
     }
 
     /// Start the *beat*.

@@ -5,7 +5,6 @@
 use super::{scheduled_task::ScheduledTask, SchedulerBackend};
 use crate::error::BeatError;
 use redis::{AsyncCommands, Client, RedisResult};
-use serde::{Deserialize, Serialize};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -13,18 +12,6 @@ use uuid::Uuid;
 const SCHEDULER_LOCK_KEY: &str = "redbeat:scheduler_lock";
 // const SCHEDULE_KEY: &str = "redbeat:schedule";
 const LOCK_TTL: u64 = 10; // 10 seconds for faster failover
-
-/// Distributed scheduler entry stored in Redis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DistributedScheduleEntry {
-    pub name: String,
-    pub task: String,
-    pub schedule: String,
-    pub enabled: bool,
-    pub last_run_at: Option<u64>,
-    pub total_run_count: u64,
-    pub queue: String,
-}
 
 /// Distributed scheduler backend using Redis for coordination
 #[derive(Clone)]

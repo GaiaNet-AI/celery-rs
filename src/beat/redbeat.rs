@@ -341,7 +341,7 @@ impl RedBeatScheduler {
                         }
                         Err(e) => {
                             log::error!("🔒 Background lock renewal connection error: {}", e);
-                            Err(e.into())
+                            Err(e)
                         }
                     }
                 });
@@ -962,7 +962,7 @@ impl RedBeatScheduler {
         Ok(())
     }
 
-    /// 从任务对象提取调度信息
+    /// Extract schedule information from task object
     fn extract_schedule_from_task(&self, task: &ScheduledTask) -> String {
         // Use stored cron expression if available
         if let Some(ref cron_expr) = task.cron_expression {
@@ -1016,7 +1016,7 @@ impl RedBeatScheduler {
         "*/1 * * * *".to_string()
     }
 
-    /// 从任务对象提取参数
+    /// Extract task arguments from task object
     fn extract_task_args(
         &self,
         task: &ScheduledTask,
