@@ -57,7 +57,7 @@ Create an app with the [`app`](https://docs.rs/celery-rs/*/celery/macro.app.html
 
 ```rust
 let my_app = celery::app!(
-    broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
+    broker = RedisBroker { std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into()) },
     tasks = [add],
     task_routes = [
         "*" => "celery",
@@ -123,72 +123,25 @@ For production environments with multiple Beat instances, use RedBeat for distri
 
 **Example**: [`examples/celery_redbeat.rs`](examples/celery_redbeat.rs)
 
-##### Manual Task Configuration
+##### Method 1: Macro-based Task Configuration
 
 ```rust
-use celery::beat::{RedBeatScheduler, RedBeatSchedulerEntry};
+use celery::beat::RedBeatScheduler;
 
 // Create RedBeat scheduler with Redis coordination
 let redbeat_scheduler = RedBeatScheduler::new(redis_url)?
-    .with_follower_check_interval(Duration::from_secs(30))
+    .with_follower_check_interval(Duration::from_secs(10))
     .with_lock_timeout(60);
 
-// Configure tasks manually
-let tasks = vec![
-    RedBeatSchedulerEntry {
-        name: "add_task".to_string(),
-        task: "add".to_string(),
-        args: vec![serde_json::json!(1), serde_json::json!(2)],
-        kwargs: HashMap::new(),
-        options: HashMap::new(),
-        schedule: "30s".to_string(),
-        enabled: true,
-        last_run_at: None,
-        total_run_count: 0,
-    },
-];
-
-// Save tasks and start scheduler
-for task in &tasks {
-    redbeat_scheduler.save_task_entry(task).await?;
-}
-
-let mut beat = celery::beat!(
-    broker = RedisBroker { redis_url },
-    scheduler_backend = RedBeatScheduler { redbeat_scheduler },
-    tasks = [],
-    task_routes = ["*" => "celery"],
-).await?;
-
-beat.start().await?;
-```
-
-##### Traditional Tasks Mode
-
-**Example**: [`examples/celery_redbeat_traditional.rs`](examples/celery_redbeat_traditional.rs)
-
-You can also use the traditional `tasks` syntax - RedBeat will automatically sync them to Redis:
-
-```rust
-use celery::beat::{DeltaSchedule, RedBeatScheduler};
-
-// Create RedBeat scheduler
-let redbeat_scheduler = RedBeatScheduler::new(redis_url)?;
-
-// Use traditional tasks syntax - automatically synced to Redis
+// Use macro syntax for task scheduling
 let mut beat = celery::beat!(
     broker = RedisBroker { redis_url },
     scheduler_backend = RedBeatScheduler { redbeat_scheduler },
     tasks = [
-        "add_every_15s" => {
+        "add" => {
             add,
-            schedule = DeltaSchedule::new(Duration::from_secs(15)),
-            args = (10, 20)
-        },
-        "multiply_every_30s" => {
-            multiply,
-            schedule = DeltaSchedule::new(Duration::from_secs(30)),
-            args = (3, 4)
+            args = (1, 2),
+            schedule = "*/2 * * * *"  // Every 2 minutes
         },
     ],
     task_routes = ["*" => "celery"],
@@ -197,16 +150,41 @@ let mut beat = celery::beat!(
 beat.start().await?;
 ```
 
+##### Method 2: Dynamic Task Scheduling
+
+```rust
+use celery::beat::RedBeatScheduler;
+
+// Create RedBeat scheduler
+let redbeat_scheduler = RedBeatScheduler::new(redis_url)?
+    .with_follower_check_interval(Duration::from_secs(10))
+    .with_lock_timeout(60);
+
+let mut beat = celery::beat!(
+    broker = RedisBroker { redis_url },
+    scheduler_backend = RedBeatScheduler { redbeat_scheduler },
+    tasks = [], // Empty tasks, will add dynamically
+    task_routes = ["*" => "celery"],
+).await?;
+
+// Dynamically add tasks
+let signature = add::new(1, 2).with_queue("celery");
+beat.schedule_named_task_cron("add".to_string(), signature, "*/2 * * * *");
+
+beat.start().await?;
+```
+
 **RedBeat Features:**
 - ✅ **Distributed Scheduling**: Multiple Beat instances with automatic leader election
-- ✅ **Redis Coordination**: Uses Redis for locks and task persistence
+- ✅ **Redis Coordination**: Uses Redis for locks and task persistence  
 - ✅ **Automatic Failover**: Seamless failover when leader instance fails
 - ✅ **Signal Handling**: Automatic lock cleanup on Ctrl+C
 - ✅ **Configurable**: Customizable check intervals and timeouts
+- ✅ **Rate Limiting**: Built-in protection against rapid-fire task scheduling
 
 ```bash
 # Start multiple RedBeat instances (only one will be active)
-REDIS_URL=redis://localhost:6379/0 cargo run --example celery_redbeat
+REDIS_URL=redis://localhost:6379/0 cargo run --example celery_redbeat macro
 ```
 
 ## Brokers
@@ -267,7 +245,7 @@ The [`examples/`](examples/) directory contains comprehensive examples:
 
 ### Scheduler Examples
 - [`examples/beat_app.rs`](examples/beat_app.rs) - Basic Beat scheduler
-- [`examples/celery_redbeat.rs`](examples/celery_redbeat.rs) - Production-ready RedBeat distributed scheduler (manual configuration)
+- [`examples/celery_redbeat.rs`](examples/celery_redbeat.rs) - Production-ready RedBeat distributed scheduler
 
 ### Running Examples
 
@@ -291,8 +269,11 @@ cargo run --example celery_worker produce long_running_task
 # Start basic Beat scheduler
 cargo run --example beat_app
 
-# Start distributed RedBeat scheduler (manual configuration)
-cargo run --example celery_redbeat
+# Start distributed RedBeat scheduler (macro configuration)
+cargo run --example celery_redbeat macro
+
+# Start distributed RedBeat scheduler (dynamic configuration)
+cargo run --example celery_redbeat dynamic
 ```
 
 #### Python Interoperability
@@ -331,7 +312,7 @@ Configure task routing to different queues:
 
 ```rust
 let app = celery::app!(
-    broker = AMQPBroker { broker_url },
+    broker = RedisBroker { std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into()) },
     tasks = [add, multiply],
     task_routes = [
         "add" => "math_queue",
