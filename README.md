@@ -268,7 +268,6 @@ The [`examples/`](examples/) directory contains comprehensive examples:
 ### Scheduler Examples
 - [`examples/beat_app.rs`](examples/beat_app.rs) - Basic Beat scheduler
 - [`examples/celery_redbeat.rs`](examples/celery_redbeat.rs) - Production-ready RedBeat distributed scheduler (manual configuration)
-- [`examples/celery_redbeat_traditional.rs`](examples/celery_redbeat_traditional.rs) - RedBeat with traditional tasks syntax
 
 ### Running Examples
 
@@ -294,9 +293,6 @@ cargo run --example beat_app
 
 # Start distributed RedBeat scheduler (manual configuration)
 cargo run --example celery_redbeat
-
-# Start distributed RedBeat scheduler (traditional tasks)
-cargo run --example celery_redbeat_traditional
 ```
 
 #### Python Interoperability
