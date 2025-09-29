@@ -208,7 +208,7 @@ impl RedBeatScheduler {
     pub async fn initialize(&mut self) -> Result<(), BeatError> {
         log::info!("🔄 Starting RedBeat initialization...");
 
-        // 尝试获取实例锁
+        // Try to acquire instance lock
         let acquired = self.try_acquire_lock().await?;
 
         if acquired {
@@ -246,7 +246,7 @@ impl RedBeatScheduler {
             .await
             .map_err(|e| BeatError::RedisError(format!("Failed to get Redis connection: {}", e)))?;
 
-        // 检查锁是否存在
+        // Check if lock exists
         let lock_exists: bool = redis::cmd("EXISTS")
             .arg(&self.lock_key)
             .query_async(&mut conn)
@@ -261,7 +261,7 @@ impl RedBeatScheduler {
             return Ok(false);
         }
 
-        // 尝试获取锁
+        // Try to acquire lock
         let result: redis::RedisResult<String> = conn
             .set_options(
                 &self.lock_key,
@@ -280,7 +280,7 @@ impl RedBeatScheduler {
                 self.instance_id
             );
 
-            // 启动锁续期程序
+            // Start lock renewal process
             if let Err(e) = self.start_lock_renewal() {
                 log::error!("Failed to start lock renewal: {}", e);
             }
@@ -351,7 +351,7 @@ impl RedBeatScheduler {
                         log::info!("🔒 Lock renewed successfully by background task");
                     }
                     Ok(0i32) => {
-                        // 诊断锁失败的具体原因
+                        // Diagnose specific reason for lock failure
                         let diagnosis_result = rt.block_on(async {
                             match redis_client.get_multiplexed_async_connection().await {
                                 Ok(mut conn) => {
@@ -421,7 +421,7 @@ impl RedBeatScheduler {
         for key in due_keys {
             match self.load_entry_from_key(&key).await {
                 Ok(entry) => {
-                    // 避免重复执行：检查任务是否真的到期
+                    // Avoid duplicate execution: check if task is actually due
                     let (is_due, _) = entry.is_due();
                     if is_due {
                         schedule.insert(entry.name.clone(), entry);

@@ -8,9 +8,9 @@ fn add(x: i32, y: i32) -> TaskResult<i32> {
     Ok(x + y)
 }
 
-/// 方法1：在 beat 宏的 tasks 中直接定义任务和调度
+/// Method 1: Define tasks and schedules directly in the beat macro's tasks
 async fn start_with_tasks_macro() -> anyhow::Result<()> {
-    println!("🚀 方法1：使用 beat 宏的 tasks 定义调度");
+    println!("🚀 Method 1: Using beat macro tasks definition for scheduling");
 
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
@@ -38,9 +38,9 @@ async fn start_with_tasks_macro() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// 方法2：使用 schedule_named_task_cron 动态添加任务
+/// Method 2: Use schedule_named_task_cron to dynamically add tasks
 async fn start_with_dynamic_scheduling() -> anyhow::Result<()> {
-    println!("🚀 方法2：使用 schedule_named_task_cron 动态添加任务");
+    println!("🚀 Method 2: Using schedule_named_task_cron to dynamically add tasks");
 
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string());
@@ -51,12 +51,12 @@ async fn start_with_dynamic_scheduling() -> anyhow::Result<()> {
     let mut beat = celery::beat!(
         broker = RedisBroker { redis_url },
         scheduler_backend = RedBeatScheduler { redbeat_scheduler },
-        tasks = [], // 空的 tasks，稍后动态添加
+        tasks = [], // Empty tasks, will add dynamically later
         task_routes = ["*" => "celery"],
     )
     .await?;
 
-    // 动态添加任务
+    // Dynamically add tasks
     let signature = add::new(1, 2).with_queue("celery");
     beat.schedule_named_task_cron("add".to_string(), signature, "*/2 * * * *");
     println!("📋 Task scheduled dynamically: add(1, 2) every 2 minutes");
