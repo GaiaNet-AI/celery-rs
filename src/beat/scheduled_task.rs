@@ -12,7 +12,6 @@ pub struct ScheduledTask {
     pub total_run_count: u32,
     pub last_run_at: Option<SystemTime>,
     pub next_call_at: SystemTime,
-    pub cron_expression: Option<String>, // Store original cron expression
 }
 
 impl ScheduledTask {
@@ -35,31 +34,6 @@ impl ScheduledTask {
             total_run_count: 0,
             last_run_at: None,
             next_call_at,
-            cron_expression: None,
-        }
-    }
-
-    /// Create a new scheduled task with cron expression.
-    pub fn new_with_cron<S>(
-        name: String,
-        message_factory: Box<dyn TryCreateMessage>,
-        queue: String,
-        schedule: S,
-        next_call_at: SystemTime,
-        cron_expression: String,
-    ) -> ScheduledTask
-    where
-        S: Schedule + 'static,
-    {
-        ScheduledTask {
-            name,
-            message_factory,
-            queue,
-            schedule: Box::new(schedule),
-            total_run_count: 0,
-            last_run_at: None,
-            next_call_at,
-            cron_expression: Some(cron_expression),
         }
     }
 

@@ -1,5 +1,4 @@
 //! Redis broker using deadpool-redis for better multithreading support.
-#![allow(dead_code)]
 use super::{Broker, BrokerBuilder, DeliveryError, DeliveryStream};
 use crate::error::{BrokerError, ProtocolError};
 use crate::protocol::Delivery;
@@ -105,6 +104,7 @@ pub struct RedisBroker {
     /// Redis connection pool for multithreading
     pool: Pool,
     /// Mapping of queue name to Queue struct.
+    #[allow(dead_code)]
     queues: HashSet<String>,
 
     /// Need to keep track of prefetch count. We put this behind a mutex to get interior
@@ -233,6 +233,7 @@ pub struct Consumer {
     error_handler: Box<dyn Fn(BrokerError) + Send + Sync + 'static>,
     polled_pop: Option<std::pin::Pin<ConsumerOutputFuture>>,
     pending_tasks: Arc<AtomicU16>,
+    #[allow(dead_code)]
     waker_tx: Sender<Waker>,
     prefetch_count: Arc<AtomicU16>,
 }

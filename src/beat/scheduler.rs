@@ -3,15 +3,20 @@ use crate::{broker::Broker, error::BeatError, protocol::TryCreateMessage};
 use log::{debug, info};
 use std::collections::BinaryHeap;
 use std::time::{Duration, SystemTime};
+use std::future::Future;
+use std::pin::Pin;
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Task execution callback type
+pub type TaskExecutionCallback = Box<dyn Fn(String, SystemTime) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send>> + Send + Sync>;
 
 /// A [`Scheduler`] manages scheduled tasks execution
 pub struct Scheduler {
     heap: BinaryHeap<ScheduledTask>,
     default_sleep_interval: Duration,
     pub broker: Box<dyn Broker>,
-    redbeat_scheduler: Option<super::redbeat::RedBeatScheduler>,
+    pub task_execution_callback: Option<TaskExecutionCallback>,
 }
 
 impl Scheduler {
@@ -21,59 +26,18 @@ impl Scheduler {
             heap: BinaryHeap::new(),
             default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
             broker,
-            redbeat_scheduler: None,
+            task_execution_callback: None,
         }
     }
 
-    /// Create a new scheduler with RedBeat distributed scheduling.
-    pub fn new_with_redbeat(
-        broker: Box<dyn Broker>,
-        redbeat_scheduler: super::redbeat::RedBeatScheduler,
-    ) -> Scheduler {
-        Scheduler {
-            heap: BinaryHeap::new(),
-            default_sleep_interval: DEFAULT_SLEEP_INTERVAL,
-            broker,
-            redbeat_scheduler: Some(redbeat_scheduler),
-        }
-    }
-
-    /// Get mutable reference to RedBeat scheduler for cleanup
-    pub fn get_redbeat_scheduler_mut(&mut self) -> Option<&mut super::redbeat::RedBeatScheduler> {
-        self.redbeat_scheduler.as_mut()
+    /// Set task execution callback for Redis status updates
+    pub fn set_task_execution_callback(&mut self, callback: TaskExecutionCallback) {
+        self.task_execution_callback = Some(callback);
     }
 
     /// Initialize scheduler
     pub async fn setup_schedule(&mut self) -> Result<(), BeatError> {
-        // RedBeat handles initialization internally
         Ok(())
-    }
-
-    /// Schedule the execution of a task with cron expression.
-    pub fn schedule_task_with_cron<S>(
-        &mut self,
-        name: String,
-        message_factory: Box<dyn TryCreateMessage>,
-        queue: String,
-        schedule: S,
-        cron_expression: String,
-    ) where
-        S: Schedule + 'static,
-    {
-        match schedule.next_call_at(None) {
-            Some(next_call_at) => self.heap.push(ScheduledTask::new_with_cron(
-                name,
-                message_factory,
-                queue,
-                schedule,
-                next_call_at,
-                cron_expression,
-            )),
-            None => debug!(
-                "The schedule of task {} never scheduled the task to run, so it has been dropped.",
-                name
-            ),
-        }
     }
 
     /// Schedule the execution of a task.
@@ -109,14 +73,8 @@ impl Scheduler {
     /// Tick once - main scheduling logic
     pub async fn tick(&mut self) -> Result<SystemTime, BeatError> {
         let now = SystemTime::now();
-
-        // Use RedBeat if available
-        if let Some(ref mut redbeat) = self.redbeat_scheduler {
-            let sleep_duration = redbeat.tick().await?;
-            return Ok(now + sleep_duration);
-        }
-
-        // Fallback to local heap scheduling
+        
+        // 统一的本地调度逻辑，不区分后端类型
         self.tick_local(now).await
     }
 
@@ -155,8 +113,16 @@ impl Scheduler {
         );
 
         self.broker.send(&message, &scheduled_task.queue).await?;
-        scheduled_task.last_run_at.replace(SystemTime::now());
+        let execution_time = SystemTime::now();
+        scheduled_task.last_run_at.replace(execution_time);
         scheduled_task.total_run_count += 1;
+
+        // Notify scheduler backend about task execution for Redis sync
+        if let Some(callback) = &self.task_execution_callback {
+            if let Err(e) = callback(scheduled_task.name.clone(), execution_time).await {
+                log::warn!("Failed to update task status in Redis: {}", e);
+            }
+        }
 
         Ok(())
     }

@@ -46,6 +46,7 @@ colored = "3.0.0"
 once_cell = { version = "1.21.3" }
 globset = "0.4.16"
 hostname = "0.4.1"
+gethostname = "0.5"
 redis = { version = "0.32.5", features=["connection-manager", "tokio-comp", "script"] }
 deadpool-redis = { version = "0.22.0", features = ["rt_tokio_1"] }
 tokio-executor-trait = "3.1.0"
