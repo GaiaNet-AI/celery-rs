@@ -472,12 +472,12 @@ impl RedBeatSchedulerBackend {
 
     /// Parse interval string (e.g., "30s", "5m", "1h")
     fn parse_interval(&self, schedule: &str) -> Option<u64> {
-        if schedule.ends_with('s') {
-            schedule[..schedule.len()-1].parse::<u64>().ok()
-        } else if schedule.ends_with('m') {
-            schedule[..schedule.len()-1].parse::<u64>().map(|m| m * 60).ok()
-        } else if schedule.ends_with('h') {
-            schedule[..schedule.len()-1].parse::<u64>().map(|h| h * 3600).ok()
+        if let Some(s) = schedule.strip_suffix('s') {
+            s.parse::<u64>().ok()
+        } else if let Some(m) = schedule.strip_suffix('m') {
+            m.parse::<u64>().map(|m| m * 60).ok()
+        } else if let Some(h) = schedule.strip_suffix('h') {
+            h.parse::<u64>().map(|h| h * 3600).ok()
         } else {
             None
         }

@@ -174,9 +174,7 @@ impl RedBeatConfig {
                 .unwrap_or_else(|| Duration::from_secs(lock_timeout / 3)),
             key_prefix: resolved.key_prefix.unwrap(),
             schedule_key: resolved.schedule_key.unwrap(),
-            instance_id: resolved
-                .instance_id
-                .unwrap_or_else(|| generate_instance_id()),
+            instance_id: resolved.instance_id.unwrap_or_else(generate_instance_id),
         })
     }
 }
