@@ -318,12 +318,8 @@ where
         };
         let message_factory = Box::new(signature);
 
-        self.scheduler.schedule_task(
-            name,
-            message_factory,
-            queue,
-            schedule,
-        );
+        self.scheduler
+            .schedule_task(name, message_factory, queue, schedule);
     }
 
     /// Schedule the execution of a task with the given `name`.
@@ -471,7 +467,7 @@ where
         if is_redbeat {
             if let Some(redbeat_backend) = self.scheduler_backend_as_redbeat_mut() {
                 redbeat_backend.initialize().await?;
-                
+
                 // Set up task execution callback for Redis status updates
                 self.setup_redbeat_callback().await?;
             }
@@ -536,10 +532,10 @@ where
     async fn setup_redbeat_callback(&mut self) -> Result<(), BeatError> {
         // Create a callback that will update Redis when tasks are executed
         // We'll use a channel-based approach to communicate with the RedBeat backend
-        
+
         // For now, we'll rely on the periodic sync in beat_loop
         // The sync_tasks_to_redis method will handle updating task status
-        
+
         log::debug!("RedBeat callback setup completed (using periodic sync approach)");
         Ok(())
     }

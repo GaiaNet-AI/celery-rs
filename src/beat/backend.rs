@@ -113,37 +113,38 @@ impl SchedulerBackend for LocalSchedulerBackend {
 }
 
 /// RedBeat scheduler backend - Redis-based distributed scheduler backend
-/// 
+///
 /// This implementation follows the original architecture pattern while adding
 /// distributed scheduling capabilities through Redis-based coordination.
 pub struct RedBeatSchedulerBackend {
     // Configuration (resolved from RedBeatConfig)
     config: ResolvedRedBeatConfig,
-    
+
     // Redis client
     redis_client: Client,
-    
+
     // Derived keys
     lock_key: String,
-    
+
     // Runtime state
     pub is_leader: bool,
     pub last_leader_check: SystemTime,
     pub last_lock_renewal: SystemTime,
-    
+
     // Task management
     pending_tasks: HashMap<String, RedBeatSchedulerEntry>,
 }
 
 impl RedBeatSchedulerBackend {
     /// Create a new RedBeat scheduler backend with the given configuration
-    /// 
+    ///
     /// This follows the original architecture pattern of accepting configuration
     /// and resolving it with defaults.
     pub fn new(config: RedBeatConfig) -> Result<Self, BeatError> {
-        let resolved_config = config.resolve()
+        let resolved_config = config
+            .resolve()
             .map_err(|e| BeatError::RedisError(format!("Configuration error: {}", e)))?;
-        
+
         let redis_client = Client::open(resolved_config.redis_url.as_str())
             .map_err(|e| BeatError::RedisError(format!("Failed to create Redis client: {}", e)))?;
 
@@ -159,16 +160,16 @@ impl RedBeatSchedulerBackend {
             pending_tasks: HashMap::new(),
         })
     }
-    
+
     /// Create a RedBeat scheduler backend with just a Redis URL (convenience method)
-    /// 
+    ///
     /// This provides backward compatibility with the previous API while encouraging
     /// use of the new configuration system.
     pub fn from_redis_url<S: Into<String>>(redis_url: S) -> Result<Self, BeatError> {
         let config = RedBeatConfig::new().redis_url(redis_url);
         Self::new(config)
     }
-    
+
     /// Get the current configuration
     pub fn config(&self) -> &ResolvedRedBeatConfig {
         &self.config
@@ -191,12 +192,17 @@ impl RedBeatSchedulerBackend {
 
     /// Initialize the RedBeat backend and try to acquire leadership
     pub async fn initialize(&mut self) -> Result<(), BeatError> {
-        log::info!("🔄 Initializing RedBeat scheduler: {}", self.config.instance_id);
-        log::info!("⚙️  Lock timeout: {}s, Renewal interval: {}s, Follower check: {}s", 
-                   self.config.lock_timeout, 
-                   self.config.lock_renewal_interval.as_secs(),
-                   self.config.follower_check_interval.as_secs());
-        
+        log::info!(
+            "🔄 Initializing RedBeat scheduler: {}",
+            self.config.instance_id
+        );
+        log::info!(
+            "⚙️  Lock timeout: {}s, Renewal interval: {}s, Follower check: {}s",
+            self.config.lock_timeout,
+            self.config.lock_renewal_interval.as_secs(),
+            self.config.follower_check_interval.as_secs()
+        );
+
         // Try to acquire leadership on startup
         match self.try_acquire_lock().await {
             Ok(acquired) => {
@@ -211,7 +217,7 @@ impl RedBeatSchedulerBackend {
                 log::warn!("Failed to check leadership on startup: {}", e);
             }
         }
-        
+
         Ok(())
     }
 
@@ -389,7 +395,9 @@ impl RedBeatSchedulerBackend {
         let _: () = conn
             .zrem(&self.config.schedule_key, &task_key)
             .await
-            .map_err(|e| BeatError::RedisError(format!("Failed to remove task from schedule: {}", e)))?;
+            .map_err(|e| {
+                BeatError::RedisError(format!("Failed to remove task from schedule: {}", e))
+            })?;
 
         let _: () = conn
             .del(&task_key)
@@ -423,18 +431,22 @@ impl RedBeatSchedulerBackend {
             .as_secs();
 
         // Calculate next run time
-        let next_run_time = if let Ok(schedule_str) = conn.hget::<_, _, String>(&task_key, "schedule").await {
-            self.calculate_next_run_time_from_schedule(&schedule_str, last_run_at)
-        } else {
-            last_run_timestamp + 30 // Default 30s fallback
-        };
+        let next_run_time =
+            if let Ok(schedule_str) = conn.hget::<_, _, String>(&task_key, "schedule").await {
+                self.calculate_next_run_time_from_schedule(&schedule_str, last_run_at)
+            } else {
+                last_run_timestamp + 30 // Default 30s fallback
+            };
 
         // Update task status using Hash operations
         let _: () = conn
-            .hset_multiple(&task_key, &[
-                ("last_run_at", last_run_timestamp.to_string()),
-                ("next_run_time", next_run_time.to_string()),
-            ])
+            .hset_multiple(
+                &task_key,
+                &[
+                    ("last_run_at", last_run_timestamp.to_string()),
+                    ("next_run_time", next_run_time.to_string()),
+                ],
+            )
             .await
             .map_err(|e| BeatError::RedisError(format!("Failed to update task status: {}", e)))?;
 
@@ -450,21 +462,29 @@ impl RedBeatSchedulerBackend {
             .await
             .map_err(|e| BeatError::RedisError(format!("Failed to update task score: {}", e)))?;
 
-        log::info!("📊 Updated task status in Redis: {} (run #{}, last: {}, next: {})", 
-                   name, new_count, last_run_timestamp, next_run_time);
+        log::info!(
+            "📊 Updated task status in Redis: {} (run #{}, last: {}, next: {})",
+            name,
+            new_count,
+            last_run_timestamp,
+            next_run_time
+        );
 
         Ok(())
     }
 
     /// Calculate next run time from schedule string
     fn calculate_next_run_time_from_schedule(&self, schedule: &str, last_run: SystemTime) -> u64 {
-        let last_run_timestamp = last_run.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-        
+        let last_run_timestamp = last_run
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
         // Simple interval parsing (e.g., "30s", "5m", "1h")
         if let Some(interval) = self.parse_interval(schedule) {
             return last_run_timestamp + interval;
         }
-        
+
         // TODO: Add cron expression parsing
         // For now, default to 30 seconds
         last_run_timestamp + 30
@@ -503,17 +523,20 @@ impl RedBeatSchedulerBackend {
         // Sync local tasks to Redis using Hash
         for task in scheduled_tasks.iter() {
             let task_key = format!("{}:{}", self.config.key_prefix, task.name);
-            
-            // Check if task exists
-            let exists: bool = conn
-                .exists(&task_key)
-                .await
-                .map_err(|e| BeatError::RedisError(format!("Failed to check task existence: {}", e)))?;
 
-            let local_last_run = task.last_run_at.map(|t| {
-                t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
-            });
-            let local_next_run = task.next_call_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+            // Check if task exists
+            let exists: bool = conn.exists(&task_key).await.map_err(|e| {
+                BeatError::RedisError(format!("Failed to check task existence: {}", e))
+            })?;
+
+            let local_last_run = task
+                .last_run_at
+                .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs());
+            let local_next_run = task
+                .next_call_at
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
             let schedule_str = self.extract_schedule_string(task);
 
             if exists {
@@ -543,10 +566,9 @@ impl RedBeatSchedulerBackend {
                         fields.push(("last_run_at", last_run.to_string()));
                     }
 
-                    let _: () = conn
-                        .hset_multiple(&task_key, &fields)
-                        .await
-                        .map_err(|e| BeatError::RedisError(format!("Failed to update task: {}", e)))?;
+                    let _: () = conn.hset_multiple(&task_key, &fields).await.map_err(|e| {
+                        BeatError::RedisError(format!("Failed to update task: {}", e))
+                    })?;
 
                     updated_count += 1;
                 }
@@ -577,7 +599,9 @@ impl RedBeatSchedulerBackend {
             let _: () = conn
                 .zadd(&self.config.schedule_key, &task_key, local_next_run as f64)
                 .await
-                .map_err(|e| BeatError::RedisError(format!("Failed to add task to schedule: {}", e)))?;
+                .map_err(|e| {
+                    BeatError::RedisError(format!("Failed to add task to schedule: {}", e))
+                })?;
         }
 
         if updated_count > 0 {
@@ -591,7 +615,10 @@ impl RedBeatSchedulerBackend {
         // Try to extract schedule information
         // For now, calculate interval from next_call_at and last_run_at
         if let Some(last_run) = task.last_run_at {
-            let interval = task.next_call_at.duration_since(last_run).unwrap_or_default();
+            let interval = task
+                .next_call_at
+                .duration_since(last_run)
+                .unwrap_or_default();
             format!("{}s", interval.as_secs())
         } else {
             "30s".to_string() // Default fallback
@@ -602,26 +629,30 @@ impl RedBeatSchedulerBackend {
 impl SchedulerBackend for RedBeatSchedulerBackend {
     fn should_sync(&self) -> bool {
         let now = SystemTime::now();
-        
+
         // Check if we need to perform leadership operations
         let should_check_leadership = now
             .duration_since(self.last_leader_check)
             .unwrap_or(Duration::ZERO)
             >= self.config.follower_check_interval;
-            
-        let should_renew_lock = self.is_leader && now
-            .duration_since(self.last_lock_renewal)
-            .unwrap_or(Duration::ZERO)
-            >= self.config.lock_renewal_interval;
-            
+
+        let should_renew_lock = self.is_leader
+            && now
+                .duration_since(self.last_lock_renewal)
+                .unwrap_or(Duration::ZERO)
+                >= self.config.lock_renewal_interval;
+
         should_check_leadership || should_renew_lock
     }
 
     fn sync(&mut self, scheduled_tasks: &mut BinaryHeap<ScheduledTask>) -> Result<(), BeatError> {
         if self.is_leader {
             // LEADER: Mark tasks for Redis sync
-            log::debug!("👑 LEADER sync: {} local tasks (Redis sync will be handled separately)", scheduled_tasks.len());
-            
+            log::debug!(
+                "👑 LEADER sync: {} local tasks (Redis sync will be handled separately)",
+                scheduled_tasks.len()
+            );
+
             // Store task information for later async sync
             self.pending_tasks.clear();
             for task in scheduled_tasks.iter() {
@@ -633,25 +664,30 @@ impl SchedulerBackend for RedBeatSchedulerBackend {
                     options: std::collections::HashMap::new(),
                     schedule: self.extract_schedule_string(task),
                     enabled: true,
-                    last_run_at: task.last_run_at.map(|t| {
-                        t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
-                    }),
+                    last_run_at: task
+                        .last_run_at
+                        .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()),
                     total_run_count: task.total_run_count as u64,
                     next_run_time: Some(
-                        task.next_call_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+                        task.next_call_at
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
                     ),
                 };
                 self.pending_tasks.insert(task.name.clone(), entry);
             }
-            
         } else {
             // FOLLOWER: Clear local tasks to prevent execution
             if !scheduled_tasks.is_empty() {
-                log::debug!("👥 FOLLOWER sync: clearing {} local tasks", scheduled_tasks.len());
+                log::debug!(
+                    "👥 FOLLOWER sync: clearing {} local tasks",
+                    scheduled_tasks.len()
+                );
                 scheduled_tasks.clear();
             }
         }
-        
+
         Ok(())
     }
 }
@@ -702,7 +738,9 @@ impl RedBeatSchedulerBackend {
             let _: () = conn
                 .zadd(&self.config.schedule_key, &task_key, score)
                 .await
-                .map_err(|e| BeatError::RedisError(format!("Failed to add task to schedule: {}", e)))?;
+                .map_err(|e| {
+                    BeatError::RedisError(format!("Failed to add task to schedule: {}", e))
+                })?;
 
             updated_count += 1;
         }

@@ -2,14 +2,18 @@ use super::{scheduled_task::ScheduledTask, Schedule};
 use crate::{broker::Broker, error::BeatError, protocol::TryCreateMessage};
 use log::{debug, info};
 use std::collections::BinaryHeap;
-use std::time::{Duration, SystemTime};
 use std::future::Future;
 use std::pin::Pin;
+use std::time::{Duration, SystemTime};
 
 const DEFAULT_SLEEP_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Task execution callback type
-pub type TaskExecutionCallback = Box<dyn Fn(String, SystemTime) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send>> + Send + Sync>;
+pub type TaskExecutionCallback = Box<
+    dyn Fn(String, SystemTime) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// A [`Scheduler`] manages scheduled tasks execution
 pub struct Scheduler {
@@ -73,7 +77,7 @@ impl Scheduler {
     /// Tick once - main scheduling logic
     pub async fn tick(&mut self) -> Result<SystemTime, BeatError> {
         let now = SystemTime::now();
-        
+
         // 统一的本地调度逻辑，不区分后端类型
         self.tick_local(now).await
     }
