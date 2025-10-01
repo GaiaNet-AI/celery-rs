@@ -140,6 +140,18 @@ cargo run --example beat_app
 
 And then you can consume tasks from Rust or Python as explained above.
 
+#### Redis-backed Beat
+
+A Redis-powered distributed scheduler backend is available through `RedisSchedulerBackend`.
+To try it out locally (requires a Redis server running):
+
+```bash
+REDIS_URL=redis://127.0.0.1:6379/0 cargo run --example redis_beat
+```
+
+Only the instance that holds the Redis lock will dispatch tasks, while followers wait and
+take over automatically if the leader disconnects.
+
 ## Road map and current state
 
 ✅ = Supported and mostly stable, although there may be a few incomplete features.<br/>

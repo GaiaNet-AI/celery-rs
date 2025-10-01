@@ -38,10 +38,12 @@ mod scheduler;
 pub use scheduler::Scheduler;
 
 mod backend;
-pub use backend::{LocalSchedulerBackend, SchedulerBackend};
+pub use backend::{
+    LocalSchedulerBackend, RedisBackendConfig, RedisSchedulerBackend, SchedulerBackend,
+};
 
 mod schedule;
-pub use schedule::{CronSchedule, DeltaSchedule, Schedule};
+pub use schedule::{CronSchedule, DeltaSchedule, Schedule, ScheduleDescriptor};
 
 mod scheduled_task;
 pub use scheduled_task::ScheduledTask;
@@ -348,22 +350,61 @@ where
 
     async fn beat_loop(&mut self) -> Result<(), BeatError> {
         loop {
-            let next_tick_at = self.scheduler.tick().await?;
+            let mut sleep_hint = None;
+            let execute_tasks = {
+                if let Some(distributed) = self.scheduler_backend.as_distributed() {
+                    let decision = distributed.before_tick().await?;
+                    sleep_hint = decision.sleep_hint;
+                    decision.execute_tasks
+                } else {
+                    true
+                }
+            };
 
-            if self.scheduler_backend.should_sync() {
+            let next_tick_at = if execute_tasks {
+                self.scheduler.tick().await?
+            } else {
+                let fallback = sleep_hint.unwrap_or_else(|| Duration::from_secs(1));
+                SystemTime::now() + fallback
+            };
+
+            let used_distributed =
+                if let Some(distributed) = self.scheduler_backend.as_distributed() {
+                    distributed
+                        .after_tick(self.scheduler.get_scheduled_tasks())
+                        .await?;
+                    true
+                } else {
+                    false
+                };
+
+            if !used_distributed && self.scheduler_backend.should_sync() {
                 self.scheduler_backend
                     .sync(self.scheduler.get_scheduled_tasks())?;
             }
 
             let now = SystemTime::now();
-            if now < next_tick_at {
-                let sleep_interval = next_tick_at.duration_since(now).expect(
+            let mut sleep_interval = if now < next_tick_at {
+                next_tick_at.duration_since(now).expect(
                     "Unexpected error when unwrapping a SystemTime comparison that is not supposed to fail",
-                );
-                let sleep_interval = match &self.max_sleep_duration {
-                    Some(max_sleep_duration) => std::cmp::min(sleep_interval, *max_sleep_duration),
-                    None => sleep_interval,
-                };
+                )
+            } else {
+                Duration::from_millis(0)
+            };
+
+            if !execute_tasks {
+                if let Some(hint) = sleep_hint {
+                    sleep_interval = hint;
+                }
+            } else if let Some(hint) = sleep_hint {
+                sleep_interval = std::cmp::min(sleep_interval, hint);
+            }
+
+            if let Some(max_sleep_duration) = &self.max_sleep_duration {
+                sleep_interval = std::cmp::min(sleep_interval, *max_sleep_duration);
+            }
+
+            if sleep_interval > Duration::from_millis(0) {
                 debug!("Now sleeping for {:?}", sleep_interval);
                 time::sleep(sleep_interval).await;
             }

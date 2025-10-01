@@ -36,6 +36,14 @@ impl Minutes {
             List(vec) => TimeUnitFieldIterator::from_vec(vec, start, Minutes::inclusive_max()),
         }
     }
+
+    pub fn to_vec(&self) -> Vec<Ordinal> {
+        use Minutes::*;
+        match self {
+            All => (Minutes::inclusive_min()..=Minutes::inclusive_max()).collect(),
+            List(vec) => vec.clone(),
+        }
+    }
 }
 
 impl TimeUnitField for Minutes {
@@ -74,6 +82,14 @@ impl Hours {
             List(vec) => TimeUnitFieldIterator::from_vec(vec, start, Hours::inclusive_max()),
         }
     }
+
+    pub fn to_vec(&self) -> Vec<Ordinal> {
+        use Hours::*;
+        match self {
+            All => (Hours::inclusive_min()..=Hours::inclusive_max()).collect(),
+            List(vec) => vec.clone(),
+        }
+    }
 }
 
 impl TimeUnitField for Hours {
@@ -110,6 +126,14 @@ impl WeekDays {
         match self {
             All => target <= 6,
             List(vec) => vec.binary_search(&target).is_ok(),
+        }
+    }
+
+    pub fn to_vec(&self) -> Vec<Ordinal> {
+        use WeekDays::*;
+        match self {
+            All => (WeekDays::inclusive_min()..=WeekDays::inclusive_max()).collect(),
+            List(vec) => vec.clone(),
         }
     }
 }
@@ -160,6 +184,14 @@ impl MonthDays {
             List(vec) => TimeUnitFieldIterator::from_vec(vec, start, stop),
         }
     }
+
+    pub fn to_vec(&self) -> Vec<Ordinal> {
+        use MonthDays::*;
+        match self {
+            All => (MonthDays::inclusive_min()..=MonthDays::inclusive_max()).collect(),
+            List(vec) => vec.clone(),
+        }
+    }
 }
 
 impl TimeUnitField for MonthDays {
@@ -196,6 +228,14 @@ impl Months {
         match self {
             All => TimeUnitFieldIterator::from_range(start, Months::inclusive_max()),
             List(vec) => TimeUnitFieldIterator::from_vec(vec, start, Months::inclusive_max()),
+        }
+    }
+
+    pub fn to_vec(&self) -> Vec<Ordinal> {
+        use Months::*;
+        match self {
+            All => (Months::inclusive_min()..=Months::inclusive_max()).collect(),
+            List(vec) => vec.clone(),
         }
     }
 }
