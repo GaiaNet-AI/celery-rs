@@ -62,6 +62,15 @@ struct Config {
 }
 
 /// Used to create a [`Beat`] app with a custom configuration.
+///
+/// # Choosing a backend
+///
+/// - [`LocalSchedulerBackend`] keeps all scheduling state in memory and is intended for
+///   single-instance deployments.
+/// - [`RedisSchedulerBackend`] persists state in Redis and coordinates leadership across
+///   multiple beat instances using Redis locks. When using the Redis backend you can further
+///   tweak [`RedisBackendConfig`] to customise the lock key prefix, lock timeout, renewal
+///   interval, follower polling interval, etc.
 pub struct BeatBuilder<Sb>
 where
     Sb: SchedulerBackend,

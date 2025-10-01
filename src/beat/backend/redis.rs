@@ -15,6 +15,23 @@ const DEFAULT_KEY_PREFIX: &str = "celery_beat";
 const LOCK_RENEW_SCRIPT: &str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) else return 0 end";
 const LOCK_RELEASE_SCRIPT: &str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
 
+fn ensure_min_duration(duration: Duration) -> Duration {
+    if duration.is_zero() {
+        Duration::from_millis(1)
+    } else {
+        duration
+    }
+}
+
+fn leader_sleep_hint(lock_renewal_interval: Duration) -> Duration {
+    let half = lock_renewal_interval.as_secs_f64() / 2.0;
+    if half < 0.001 {
+        Duration::from_millis(1)
+    } else {
+        Duration::from_secs_f64(half)
+    }
+}
+
 fn generate_instance_id(prefix: &str) -> String {
     let host = hostname_get()
         .map(|s| s.to_string_lossy().into_owned())
@@ -405,6 +422,12 @@ impl DistributedScheduler for RedisSchedulerBackend {
     ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + 'a>> {
         Box::pin(async move {
             let now = Instant::now();
+            let leader_hint = leader_sleep_hint(self.config.lock_renewal_interval);
+            let follower_hint = ensure_min_duration(std::cmp::min(
+                self.config.follower_idle_sleep,
+                self.config.follower_check_interval,
+            ));
+
             if self.state.is_leader {
                 if self
                     .state
@@ -415,10 +438,10 @@ impl DistributedScheduler for RedisSchedulerBackend {
                     if let Err(err) = self.renew_lock().await {
                         warn!("Redis scheduler backend failed to renew lock: {}", err);
                         self.state.is_leader = false;
-                        return Ok(TickDecision::skip(self.config.follower_idle_sleep));
+                        return Ok(TickDecision::skip(follower_hint));
                     }
                 }
-                Ok(TickDecision::execute())
+                Ok(TickDecision::execute_with_hint(leader_hint))
             } else {
                 if self
                     .state
@@ -430,10 +453,10 @@ impl DistributedScheduler for RedisSchedulerBackend {
                 {
                     self.state.last_leader_attempt = Some(now);
                     if self.try_acquire_lock().await? {
-                        return Ok(TickDecision::execute());
+                        return Ok(TickDecision::execute_with_hint(leader_hint));
                     }
                 }
-                Ok(TickDecision::skip(self.config.follower_idle_sleep))
+                Ok(TickDecision::skip(follower_hint))
             }
         })
     }

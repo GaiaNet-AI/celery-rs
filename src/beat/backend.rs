@@ -54,6 +54,13 @@ impl TickDecision {
         }
     }
 
+    pub fn execute_with_hint(sleep_hint: Duration) -> Self {
+        TickDecision {
+            execute_tasks: true,
+            sleep_hint: Some(sleep_hint),
+        }
+    }
+
     pub fn skip(sleep_hint: Duration) -> Self {
         TickDecision {
             execute_tasks: false,
