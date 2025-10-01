@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Introduced a Redis-backed distributed scheduler backend with configurable lock
+  management and task state persistence, plus documentation and examples for
+  running multi-instance beat deployments.
+
 ### Changed
 
 - Updated GitHub Actions to latest versions to resolve deprecation warnings
