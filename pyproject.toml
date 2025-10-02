@@ -1,3 +1,12 @@
+[project]
+name = "celery-rs-python-examples"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "celery>=5.3",
+    "redis>=4.5",
+]
+
 [tool.black]
 line-length = 100
 

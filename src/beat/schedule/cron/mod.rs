@@ -3,9 +3,10 @@
 //! [cron crate](https://crates.io/crates/cron).
 
 use chrono::{offset::Utc, TimeZone};
+use std::any::TypeId;
 use std::time::SystemTime;
 
-use super::Schedule;
+use super::{descriptor::CronDescriptor, Schedule};
 use crate::error::ScheduleError;
 
 mod parsing;
@@ -64,11 +65,19 @@ where
 
 impl<Z> Schedule for CronSchedule<Z>
 where
-    Z: TimeZone,
+    Z: TimeZone + 'static,
 {
     fn next_call_at(&self, _last_run_at: Option<SystemTime>) -> Option<SystemTime> {
         let now = self.time_zone.from_utc_datetime(&Utc::now().naive_utc());
         self.next(now).map(SystemTime::from)
+    }
+
+    fn describe(&self) -> Option<super::ScheduleDescriptor> {
+        if TypeId::of::<Z>() == TypeId::of::<Utc>() {
+            Some(super::ScheduleDescriptor::cron(self.snapshot()))
+        } else {
+            None
+        }
     }
 }
 
@@ -115,6 +124,25 @@ impl CronSchedule<Utc> {
     /// - `@hourly`: each hour at 00
     pub fn from_string(schedule: &str) -> Result<Self, ScheduleError> {
         Self::from_string_with_time_zone(schedule, Utc)
+    }
+
+    pub fn describe(&self) -> CronDescriptor {
+        self.snapshot()
+    }
+}
+
+impl<Z> CronSchedule<Z>
+where
+    Z: TimeZone + 'static,
+{
+    fn snapshot(&self) -> CronDescriptor {
+        CronDescriptor {
+            minutes: self.minutes.to_vec(),
+            hours: self.hours.to_vec(),
+            month_days: self.month_days.to_vec(),
+            months: self.months.to_vec(),
+            week_days: self.week_days.to_vec(),
+        }
     }
 }
 

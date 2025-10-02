@@ -1,7 +1,10 @@
 /// This module contains the definition of application-provided scheduler backends.
 use super::scheduled_task::ScheduledTask;
 use crate::error::BeatError;
-use std::collections::BinaryHeap;
+use std::{collections::BinaryHeap, future::Future, pin::Pin, time::Duration};
+
+mod redis;
+pub use redis::{RedisBackendConfig, RedisSchedulerBackend};
 
 /// A `SchedulerBackend` is in charge of keeping track of the internal state of the scheduler
 /// according to some source of truth, such as a database.
@@ -24,9 +27,61 @@ pub trait SchedulerBackend {
     /// This method will not be called if `should_sync` returns `false`.
     fn sync(&mut self, scheduled_tasks: &mut BinaryHeap<ScheduledTask>) -> Result<(), BeatError>;
 
+    /// Return a mutable reference to the distributed capability of this backend, if any.
+    ///
+    /// Backends that do not support distributed coordination can leave the default
+    /// implementation untouched, and the beat loop will fall back to single-instance
+    /// behaviour.
+    fn as_distributed(&mut self) -> Option<&mut dyn DistributedScheduler> {
+        None
+    }
+
     // Maybe we should consider some methods to inform the backend that a task has been executed.
     // Not sure about what Python does, but at least it keeps a counter with the number of executed tasks,
     // and the backend has access to that.
+}
+
+pub struct TickDecision {
+    pub execute_tasks: bool,
+    pub sleep_hint: Option<Duration>,
+}
+
+impl TickDecision {
+    pub fn execute() -> Self {
+        TickDecision {
+            execute_tasks: true,
+            sleep_hint: None,
+        }
+    }
+
+    pub fn execute_with_hint(sleep_hint: Duration) -> Self {
+        TickDecision {
+            execute_tasks: true,
+            sleep_hint: Some(sleep_hint),
+        }
+    }
+
+    pub fn skip(sleep_hint: Duration) -> Self {
+        TickDecision {
+            execute_tasks: false,
+            sleep_hint: Some(sleep_hint),
+        }
+    }
+}
+
+pub trait DistributedScheduler {
+    fn before_tick<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + 'a>>;
+
+    fn after_tick<'a>(
+        &'a mut self,
+        scheduled_tasks: &'a mut BinaryHeap<ScheduledTask>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>>;
+
+    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// The default [`SchedulerBackend`](trait.SchedulerBackend.html).

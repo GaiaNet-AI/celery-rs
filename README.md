@@ -140,6 +140,26 @@ cargo run --example beat_app
 
 And then you can consume tasks from Rust or Python as explained above.
 
+#### Redis-backed Beat
+
+A Redis-powered distributed scheduler backend is available through `RedisSchedulerBackend`.
+To try it out locally (requires a Redis server running):
+
+```bash
+REDIS_URL=redis://127.0.0.1:6379/0 cargo run --example redis_beat
+```
+
+Only the instance that holds the Redis lock will dispatch tasks, while followers wait and
+take over automatically if the leader disconnects.
+
+To test multi-instance failover:
+
+1. Run a worker connected to Redis so scheduled tasks are consumed (see `examples/celery_app.rs`).
+2. Start the first beat instance as shown above; it will log that it acquired leadership.
+3. Start a second beat instance with the same command; it stays on standby.
+4. Stop the first instance (e.g. Ctrl+C). Within a few seconds the standby will acquire the lock
+   and resume scheduling without losing any tasks.
+
 ## Road map and current state
 
 ✅ = Supported and mostly stable, although there may be a few incomplete features.<br/>
@@ -148,31 +168,31 @@ And then you can consume tasks from Rust or Python as explained above.
 
 ### Core
 
-> **Note**: Issue tracking links below reference the original repository where development history is maintained.
+> **Note**: Issue tracking links below reference this repository.
 
 |                  | Status  | Tracking  |
 | ---------------- |:-------:| --------- |
-| Protocol         | ⚠️      | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Protocol%20Feature?label=Issues)](https://github.com/rusty-celery/rusty-celery/issues?q=is%3Aissue+label%3A%22Protocol+Feature%22+is%3Aopen) |
+| Protocol         | ⚠️      | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Protocol%20Feature%22+is%3Aopen) |
 | Producers        | ✅      | |
 | Consumers        | ✅      | |
 | Brokers          | ✅      | |
 | Beat             | ✅      | |
-| Backends         | 🔴      | |
-| [Baskets](https://github.com/rusty-celery/rusty-celery/issues/53) | 🔴      | |
+| Backends         | ⚠️      | |
+| Baskets | 🔴      | |
 
 ### Brokers
 
 |       | Status | Tracking |
 | ----- |:------:| -------- |
-| AMQP  | ✅     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Broker%3A%20AMQP?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Broker%3A%20AMQP) |
-| Redis | ✅     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Broker%3A%20Redis?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Broker%3A%20Redis) |
+| AMQP  | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20AMQP%22+is%3Aopen) |
+| Redis | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20Redis%22+is%3Aopen) |
 
 ### Backends
 
 |             | Status | Tracking |
 | ----------- |:------:| -------- |
-| RPC         | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20RPC?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20RPC) |
-| Redis       | 🔴     | [![](https://img.shields.io/github/issues/rusty-celery/rusty-celery/Backend%3A%20Redis?label=Issues)](https://github.com/rusty-celery/rusty-celery/labels/Backend%3A%20Redis) |
+| RPC         | 🔴     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20RPC%22+is%3Aopen) |
+| Redis       | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20Redis%22+is%3Aopen) |
 
 ## Project History and Maintenance
 

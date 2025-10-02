@@ -50,6 +50,10 @@ pub enum BeatError {
     /// An error with a task schedule.
     #[error("task schedule error")]
     ScheduleError(#[from] ScheduleError),
+
+    /// Redis-related error.
+    #[error("redis error: {0}")]
+    RedisError(String),
 }
 
 /// Errors that are related to task schedules.
