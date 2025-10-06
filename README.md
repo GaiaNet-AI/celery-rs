@@ -1,6 +1,6 @@
 <div align="center">
     <br>
-    <img src="img/rusty-celery-logo-transparent.png"/>
+    <img src="img/celery-rs-logo.png" width="420"/>
     <br>
     <br>
     <p>
@@ -72,6 +72,45 @@ And consume tasks as a worker from a queue with
 ```rust
 my_app.consume().await?;
 ```
+
+### Capturing results
+
+Configure a result backend to persist task state and fetch results from the client side:
+
+```rust
+use std::time::Duration;
+use celery::backend::RedisBackend;
+use celery::prelude::*;
+
+#[celery::task]
+fn add(x: i32, y: i32) -> TaskResult<i32> {
+    Ok(x + y)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let backend = RedisBackend::new("redis://127.0.0.1/0")?
+        .with_result_ttl(Duration::from_secs(600));
+
+    let app = celery::app!(
+        broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
+        tasks = [add],
+        task_routes = [ "*" => "celery" ],
+        result_backend = backend,
+    ).await?;
+
+    let async_result = app.send_task(add::new(1, 2)).await?;
+    println!("state = {}", async_result.state().await?);
+
+    let sum: i32 = async_result.get(Some(Duration::from_secs(10))).await?;
+    println!("1 + 2 = {sum}");
+    Ok(())
+}
+```
+
+[`AsyncResult`](https://docs.rs/celery-rs/latest/celery/task/struct.AsyncResult.html) now
+exposes idiomatic helpers: `state()` for the latest `TaskState`, `ready()` to check completion,
+and `get(timeout)` to await the final value (raising a `BackendError::Timeout` on expiration).
 
 ## Examples
 
@@ -177,7 +216,7 @@ To test multi-instance failover:
 | Consumers        | ✅      | |
 | Brokers          | ✅      | |
 | Beat             | ✅      | |
-| Backends         | ⚠️      | |
+| Backends         | ✅      | Redis result backend (0.6.2); [RPC tracking](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20RPC%22+is%3Aopen) |
 | Baskets | 🔴      | |
 
 ### Brokers
@@ -192,7 +231,7 @@ To test multi-instance failover:
 |             | Status | Tracking |
 | ----------- |:------:| -------- |
 | RPC         | 🔴     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20RPC%22+is%3Aopen) |
-| Redis       | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20Redis%22+is%3Aopen) |
+| Redis       | ✅     | Task results + Beat (0.6.2); [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20Redis%22+is%3Aopen) |
 
 ## Project History and Maintenance
 

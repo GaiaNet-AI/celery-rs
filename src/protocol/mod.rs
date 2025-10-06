@@ -69,6 +69,7 @@ where
                     id,
                     task: T::NAME.into(),
                     origin: ORIGIN.to_owned(),
+                    retries: Some(0),
                     ..Default::default()
                 },
                 raw_body: Vec::new(),

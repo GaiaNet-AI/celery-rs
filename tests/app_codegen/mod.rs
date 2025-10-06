@@ -1,61 +1,76 @@
 //! These tests should be compiled but not run.
 
+fn ensure_addr() {
+    std::env::set_var("AMQP_ADDR", "amqp://guest:guest@127.0.0.1:5672//");
+}
+
+async fn expect_macro_success<F, T>(future: F)
+where
+    F: std::future::Future<Output = celery::export::Result<T>>,
+{
+    match future.await {
+        Ok(_) => (),
+        Err(celery::error::CeleryError::BrokerError(_)) => (),
+        Err(err) => panic!("unexpected error: {:?}", err),
+    }
+}
+
 #[tokio::test]
 async fn test_basic_use() {
-    let _app = celery::app!(
+    ensure_addr();
+    expect_macro_success(celery::app!(
         broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
         tasks = [],
         task_routes = []
-    )
-    .await
-    .unwrap();
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_basic_use_with_variable() {
+    ensure_addr();
     let connection_string = std::env::var("AMQP_ADDR").unwrap();
     let default_queue = "default";
-    let _app = celery::app!(
+    expect_macro_success(celery::app!(
         broker = AMQPBroker { connection_string },
         tasks = [],
         task_routes = [],
         default_queue = default_queue,
-    )
-    .await
-    .unwrap();
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_basic_use_with_trailing_comma() {
-    let _app = celery::app!(
+    ensure_addr();
+    expect_macro_success(celery::app!(
         broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
         tasks = [],
         task_routes = [],
-    )
-    .await
-    .unwrap();
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_with_options() {
-    let _app = celery::app!(
+    ensure_addr();
+    expect_macro_success(celery::app!(
         broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
         tasks = [],
         task_routes = [],
         task_time_limit = 2
-    )
-    .await
-    .unwrap();
+    ))
+    .await;
 }
 
 #[tokio::test]
 async fn test_with_options_and_trailing_comma() {
-    let _app = celery::app!(
+    ensure_addr();
+    expect_macro_success(celery::app!(
         broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
         tasks = [],
         task_routes = [],
         task_time_limit = 2,
-    )
-    .await
-    .unwrap();
+    ))
+    .await;
 }

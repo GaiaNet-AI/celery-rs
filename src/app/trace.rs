@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{self, Duration, Instant};
 
+use crate::backend::{ResultBackend, TaskMeta};
 use crate::error::{ProtocolError, TaskError, TraceError};
 use crate::protocol::Message;
-use crate::task::{Request, Task, TaskEvent, TaskOptions, TaskStatus};
+use crate::task::{Request, ResultValue, Task, TaskEvent, TaskOptions, TaskStatus};
 use crate::Celery;
 
 /// A `Tracer` provides the API through which a `Celery` application interacts with its tasks.
@@ -21,13 +23,18 @@ where
 {
     task: T,
     event_tx: UnboundedSender<TaskEvent>,
+    backend: Option<Arc<dyn ResultBackend>>,
 }
 
 impl<T> Tracer<T>
 where
     T: Task,
 {
-    fn new(task: T, event_tx: UnboundedSender<TaskEvent>) -> Self {
+    fn new(
+        task: T,
+        event_tx: UnboundedSender<TaskEvent>,
+        backend: Option<Arc<dyn ResultBackend>>,
+    ) -> Self {
         if let Some(eta) = task.request().eta {
             info!(
                 "Task {}[{}] received, ETA: {}",
@@ -39,7 +46,42 @@ where
             info!("Task {}[{}] received", task.name(), task.request().id);
         }
 
-        Self { task, event_tx }
+        Self {
+            task,
+            event_tx,
+            backend,
+        }
+    }
+
+    fn task_id(&self) -> &str {
+        &self.task.request().id
+    }
+
+    async fn persist_meta(&self, meta: TaskMeta) {
+        if let Some(backend) = &self.backend {
+            if let Err(err) = backend.store_task_meta(meta).await {
+                error!("Failed storing result for task {}: {}", self.task_id(), err);
+            }
+        }
+    }
+
+    fn build_success_meta(&self, returned: &T::Returns) -> TaskMeta
+    where
+        T::Returns: ResultValue,
+    {
+        match TaskMeta::success(self.task_id(), returned) {
+            Ok(meta) => meta,
+            Err(err) => {
+                error!(
+                    "Failed to serialize result for task {}: {}",
+                    self.task_id(),
+                    err
+                );
+                let mut fallback = TaskMeta::success(self.task_id(), &()).unwrap();
+                fallback.result = Some(Value::String(format!("{:?}", returned)));
+                fallback
+            }
+        }
     }
 }
 
@@ -65,6 +107,8 @@ where
                 // bigger things to worry about like running out of memory.
                 error!("Failed sending task event");
             });
+
+        self.persist_meta(TaskMeta::started(self.task_id())).await;
 
         let start = Instant::now();
         let result = match self.task.time_limit() {
@@ -97,6 +141,9 @@ where
                     .unwrap_or_else(|_| {
                         error!("Failed sending task event");
                     });
+
+                let meta = self.build_success_meta(&returned);
+                self.persist_meta(meta).await;
 
                 Ok(())
             }
@@ -147,6 +194,20 @@ where
                     .unwrap_or_else(|_| {
                         error!("Failed sending task event");
                     });
+
+                let retries_count = self.task.request().retries + 1;
+                if matches!(e, TaskError::Retry(_)) {
+                    self.persist_meta(TaskMeta::retry(
+                        self.task_id(),
+                        &e,
+                        retry_eta.clone(),
+                        retries_count,
+                    ))
+                    .await;
+                } else {
+                    self.persist_meta(TaskMeta::failure(self.task_id(), &e))
+                        .await;
+                }
 
                 if !should_retry {
                     return Err(TraceError::TaskError(e));
@@ -243,7 +304,7 @@ pub(super) fn build_tracer<T: Task + Send + 'static>(
     hostname: String,
 ) -> TraceBuilderResult {
     // Build request object.
-    let mut request = Request::<T>::try_from_message(app, message)?;
+    let mut request = Request::<T>::try_from_message(app.clone(), message)?;
     request.hostname = Some(hostname);
 
     // Override app-level options with task-level options.
@@ -255,5 +316,9 @@ pub(super) fn build_tracer<T: Task + Send + 'static>(
     // it.
     let task = T::from_request(request, options);
 
-    Ok(Box::new(Tracer::<T>::new(task, event_tx)))
+    Ok(Box::new(Tracer::<T>::new(
+        task,
+        event_tx,
+        app.result_backend(),
+    )))
 }
