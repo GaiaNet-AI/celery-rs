@@ -3,7 +3,7 @@ members = ["./", "celery-codegen"]
 
 [package]
 name = "celery-rs"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["epwalsh <epwalsh10@gmail.com>"]
 edition = "2018"
 keywords = ["celery", "amqp", "rabbitmq", "background-jobs"]
@@ -47,7 +47,7 @@ log = "0.4.28"
 futures = { version = "0.3.31", features = ["async-await"] }
 uuid = { version = "1.18.1", features = ["v4"]}
 rand = "0.8"
-celery-rs-codegen = { version = "0.6.1", path = "./celery-codegen", optional = true }
+celery-rs-codegen = { version = "0.6.2", path = "./celery-codegen", optional = true }
 colored = "3.0.0"
 once_cell = { version = "1.21.3" }
 globset = "0.4.16"

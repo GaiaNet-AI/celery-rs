@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- No unreleased changes yet.
+
+## [v0.6.2](https://github.com/GaiaNet-AI/celery-rs/releases/tag/v0.6.2) - 2025-10-07
+
 ### Added
 
 - Introduced a pluggable result backend API with a Redis implementation, enhanced
