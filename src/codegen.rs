@@ -103,6 +103,7 @@ macro_rules! __beat_internal {
 /// - `task_max_retry_delay`: Set an app-level [`TaskOptions::max_retry_delay`](task/struct.TaskOptions.html#structfield.max_retry_delay).
 /// - `task_retry_for_unexpected`: Set an app-level [`TaskOptions::retry_for_unexpected`](task/struct.TaskOptions.html#structfield.retry_for_unexpected).
 /// - `acks_late`: Set an app-level [`TaskOptions::acks_late`](task/struct.TaskOptions.html#structfield.acks_late).
+/// - `result_backend`: Set the [`CeleryBuilder::result_backend`](struct.CeleryBuilder.html#method.result_backend).
 /// - `broker_connection_timeout`: Set the
 ///   [`CeleryBuilder::broker_connection_timeout`](struct.CeleryBuilder.html#method.broker_connection_timeout).
 /// - `broker_connection_retry`: Set the

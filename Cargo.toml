@@ -26,6 +26,9 @@ name = "celery_app"
 [[example]]
 name = "redis_beat"
 
+[[example]]
+name = "redis_results"
+
 [dependencies]
 base64 = "0.22.1"
 chrono = { version = "0.4.42", features = ["serde"] }
@@ -44,7 +47,7 @@ log = "0.4.28"
 futures = { version = "0.3.31", features = ["async-await"] }
 uuid = { version = "1.18.1", features = ["v4"]}
 rand = "0.8"
-celery-rs-codegen = { version = "0.6.0", path = "./celery-codegen", optional = true }
+celery-rs-codegen = { version = "0.6.1", path = "./celery-codegen", optional = true }
 colored = "3.0.0"
 once_cell = { version = "1.21.3" }
 globset = "0.4.16"

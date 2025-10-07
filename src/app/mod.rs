@@ -17,6 +17,7 @@ use tokio_stream::StreamMap;
 
 mod trace;
 
+use crate::backend::ResultBackend;
 use crate::broker::{
     broker_builder_from_url, build_and_connect, configure_task_routes, Broker, BrokerBuilder,
     Delivery,
@@ -38,6 +39,7 @@ struct Config {
     default_queue: String,
     task_options: TaskOptions,
     task_routes: Vec<(String, String)>,
+    result_backend: Option<Arc<dyn ResultBackend>>,
 }
 
 /// Used to create a [`Celery`] app with a custom configuration.
@@ -67,6 +69,7 @@ impl CeleryBuilder {
                 default_queue: "celery".into(),
                 task_options: TaskOptions::default(),
                 task_routes: vec![],
+                result_backend: None,
             },
         }
     }
@@ -83,6 +86,15 @@ impl CeleryBuilder {
     /// Set the name of the default queue to something other than "celery".
     pub fn default_queue(mut self, queue_name: &str) -> Self {
         self.config.default_queue = queue_name.into();
+        self
+    }
+
+    /// Configure a result backend implementation for storing task results.
+    pub fn result_backend<B>(mut self, backend: B) -> Self
+    where
+        B: ResultBackend + 'static,
+    {
+        self.config.result_backend = Some(Arc::new(backend));
         self
     }
 
@@ -224,6 +236,7 @@ impl CeleryBuilder {
             broker_connection_retry: self.config.broker_connection_retry,
             broker_connection_max_retries: self.config.broker_connection_max_retries,
             broker_connection_retry_delay: self.config.broker_connection_retry_delay,
+            result_backend: self.config.result_backend.clone(),
         })
     }
 }
@@ -257,9 +270,15 @@ pub struct Celery {
     broker_connection_retry: bool,
     broker_connection_max_retries: u32,
     broker_connection_retry_delay: u32,
+    result_backend: Option<Arc<dyn ResultBackend>>,
 }
 
 impl Celery {
+    /// Returns a clone of the configured result backend, if any.
+    pub fn result_backend(&self) -> Option<Arc<dyn ResultBackend>> {
+        self.result_backend.clone()
+    }
+
     /// Print a pretty ASCII art logo and configuration settings.
     ///
     /// This is useful and fun to print from a worker application right after
@@ -316,7 +335,10 @@ impl Celery {
             queue,
         );
         self.broker.send(&message, queue).await?;
-        Ok(AsyncResult::new(message.task_id()))
+        Ok(AsyncResult::with_backend(
+            message.task_id(),
+            self.result_backend(),
+        ))
     }
 
     /// Register a task.

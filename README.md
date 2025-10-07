@@ -35,7 +35,9 @@ We welcome contributions from everyone regardless of your experience level with 
 
 If you already know the basics of Rust but are new to Celery, check out the [Rusty Celery Book](https://rusty-celery.github.io/) or the original Python [Celery Project](http://www.celeryproject.org/).
 
-## Quick start
+## Getting Started
+
+### Quick start
 
 Define tasks by decorating functions with the [`task`](https://docs.rs/celery-rs/*/celery/attr.task.html) attribute.
 
@@ -73,13 +75,60 @@ And consume tasks as a worker from a queue with
 my_app.consume().await?;
 ```
 
-## Examples
+### Capturing results
+
+Configure a result backend to persist task state and fetch results from the client side:
+
+```rust
+use std::time::Duration;
+use celery::backend::RedisBackend;
+use celery::prelude::*;
+
+#[celery::task]
+fn add(x: i32, y: i32) -> TaskResult<i32> {
+    Ok(x + y)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let backend = RedisBackend::new("redis://127.0.0.1/0")?
+        .with_result_ttl(Duration::from_secs(600));
+
+    let app = celery::app!(
+        broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
+        tasks = [add],
+        task_routes = [ "*" => "celery" ],
+        result_backend = backend,
+    ).await?;
+
+    let async_result = app.send_task(add::new(1, 2)).await?;
+    println!("state = {}", async_result.state().await?);
+
+    let sum: i32 = async_result.get(Some(Duration::from_secs(10))).await?;
+    println!("1 + 2 = {sum}");
+    Ok(())
+}
+```
+
+[`AsyncResult`](https://docs.rs/celery-rs/latest/celery/task/struct.AsyncResult.html) now
+exposes idiomatic helpers: `state()` for the latest `TaskState`, `ready()` to check completion,
+and `get(timeout)` to await the final value (raising a `BackendError::Timeout` on expiration).
+
+### Example catalog
 
 The [`examples/`](https://github.com/GaiaNet-AI/celery-rs/tree/main/examples) directory contains:
 
 - a simple Celery app implemented in Rust using an AMQP broker ([`examples/celery_app.rs`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/celery_app.rs)),
 - the same Celery app implemented in Python ([`examples/celery_app.py`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/celery_app.py)),
-- and a Beat app implemented in Rust ([`examples/beat_app.rs`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/beat_app.rs)).
+- a Redis result-backend demo showing AsyncResult usage ([`examples/redis_results.rs`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/redis_results.rs)),
+- a Beat app implemented in Rust ([`examples/beat_app.rs`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/beat_app.rs)),
+- and a Redis-backed Beat scheduler with leader election ([`examples/redis_beat.rs`](https://github.com/GaiaNet-AI/celery-rs/blob/main/examples/redis_beat.rs)).
+
+## Running the Examples
+
+Explore the demos interactively (preview below):
+
+![](./img/demo.gif)
 
 ### Prerequisites
 
@@ -93,11 +142,7 @@ Otherwise simply run the helper script:
 
 This will download and run the official [RabbitMQ](https://www.rabbitmq.com/) image (RabbitMQ is a popular AMQP broker).
 
-### Run the examples
-
-![](./img/demo.gif)
-
-#### Run Rust Celery app
+### Run the Rust Celery app
 
 You can consume tasks with:
 
@@ -113,7 +158,7 @@ cargo run --example celery_app produce [task_name]
 
 Current supported tasks for this example are: `add`, `buggy_task`, `long_running_task` and `bound_task`
 
-#### Run Python Celery app
+### Run the Python Celery app
 
 Similarly, you can consume or produce tasks from Python by running
 
@@ -130,7 +175,7 @@ python examples/celery_app.py produce
 
 You'll need to have Python 3 installed, along with the requirements listed in the `requirements.txt` file.  You'll also have to provide a task name. This example implements 4 tasks: `add`, `buggy_task`, `long_running_task` and `bound_task`
 
-#### Run Rust Beat app
+### Run the Rust Beat app
 
 You can start the Rust beat with:
 
@@ -140,7 +185,7 @@ cargo run --example beat_app
 
 And then you can consume tasks from Rust or Python as explained above.
 
-#### Redis-backed Beat
+### Redis-backed Beat failover
 
 A Redis-powered distributed scheduler backend is available through `RedisSchedulerBackend`.
 To try it out locally (requires a Redis server running):
@@ -166,33 +211,18 @@ To test multi-instance failover:
 ⚠️ = Partially implemented and under active development.<br/>
 🔴 = Not supported yet but on-deck to be implemented soon.
 
-### Core
-
 > **Note**: Issue tracking links below reference this repository.
 
-|                  | Status  | Tracking  |
-| ---------------- |:-------:| --------- |
-| Protocol         | ⚠️      | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Protocol%20Feature%22+is%3Aopen) |
-| Producers        | ✅      | |
-| Consumers        | ✅      | |
-| Brokers          | ✅      | |
-| Beat             | ✅      | |
-| Backends         | ⚠️      | |
-| Baskets | 🔴      | |
-
-### Brokers
-
-|       | Status | Tracking |
-| ----- |:------:| -------- |
-| AMQP  | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20AMQP%22+is%3Aopen) |
-| Redis | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20Redis%22+is%3Aopen) |
-
-### Backends
-
-|             | Status | Tracking |
-| ----------- |:------:| -------- |
-| RPC         | 🔴     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20RPC%22+is%3Aopen) |
-| Redis       | ✅     | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20Redis%22+is%3Aopen) |
+| Area      | Component  | Status | Notes / Tracking |
+|-----------|------------|:------:|------------------|
+| Core      | Protocol   | ⚠️ | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Protocol%20Feature%22+is%3Aopen) |
+| Core      | Producers  | ✅ | |
+| Core      | Consumers  | ✅ | |
+| Core      | Beat       | ✅ | |
+| Brokers   | AMQP       | ✅ | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20AMQP%22+is%3Aopen) |
+| Brokers   | Redis      | ✅ | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Broker%3A%20Redis%22+is%3Aopen) |
+| Backends  | RPC        | 🔴 | [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20RPC%22+is%3Aopen) |
+| Backends  | Redis      | ✅ | Task results + Beat (0.6.2); [Open issues](https://github.com/GaiaNet-AI/celery-rs/issues?q=is%3Aissue+label%3A%22Backend%3A%20Redis%22+is%3Aopen) |
 
 ## Project History and Maintenance
 

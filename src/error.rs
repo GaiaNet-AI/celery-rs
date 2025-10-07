@@ -1,6 +1,7 @@
 //! All error types used throughout the library.
 
 use chrono::{DateTime, Utc};
+use deadpool_redis::PoolError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -34,6 +35,10 @@ pub enum CeleryError {
 
     #[error("received unregistered task {0}")]
     UnregisteredTaskError(String),
+
+    /// Any result backend related error.
+    #[error("backend error")]
+    BackendError(#[from] BackendError),
 }
 
 /// Errors that can occur while creating or using a `Beat` app.
@@ -54,6 +59,38 @@ pub enum BeatError {
     /// Redis-related error.
     #[error("redis error: {0}")]
     RedisError(String),
+}
+
+/// Errors that can occur while storing or retrieving task results.
+#[derive(Error, Debug)]
+pub enum BackendError {
+    /// Raised when a result backend was requested but not configured.
+    #[error("result backend not configured")]
+    NotConfigured,
+
+    /// Raised when waiting for a task exceeded the provided timeout.
+    #[error("timeout waiting for task result")]
+    Timeout,
+
+    /// Raised when deserializing or serializing backend payloads failed.
+    #[error("backend serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+
+    /// Raised when a Redis command fails.
+    #[error("redis error: {0}")]
+    Redis(#[from] redis::RedisError),
+
+    /// Raised when acquiring a connection from the Redis pool failed.
+    #[error("redis pool error: {0}")]
+    Pool(#[from] PoolError),
+
+    /// Raised when constructing the Redis pool failed.
+    #[error("redis pool creation error: {0}")]
+    PoolCreationError(String),
+
+    /// Raised when the task finished with a failure state.
+    #[error("task failed: {0}")]
+    TaskFailed(String),
 }
 
 /// Errors that are related to task schedules.

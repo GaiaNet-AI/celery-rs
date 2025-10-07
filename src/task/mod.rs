@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rand::distributions::{Distribution, Uniform};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::TaskError;
@@ -23,14 +24,28 @@ pub type TaskResult<R> = Result<R, TaskError>;
 
 #[doc(hidden)]
 pub trait AsTaskResult {
-    type Returns: Send + Sync + std::fmt::Debug;
+    type Returns: Send + Sync + std::fmt::Debug + ResultValue + for<'de> Deserialize<'de>;
 }
 
 impl<R> AsTaskResult for TaskResult<R>
 where
-    R: Send + Sync + std::fmt::Debug,
+    R: Send + Sync + std::fmt::Debug + ResultValue + for<'de> Deserialize<'de>,
 {
     type Returns = R;
+}
+
+/// Helper trait for converting task return values into JSON for storage.
+pub trait ResultValue {
+    fn to_json_value(&self) -> Result<Value, serde_json::Error>;
+}
+
+impl<T> ResultValue for T
+where
+    T: Serialize,
+{
+    fn to_json_value(&self) -> Result<Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
 }
 
 /// A `Task` represents a unit of work that a `Celery` app can produce or consume.
@@ -65,7 +80,7 @@ pub trait Task: Send + Sync + std::marker::Sized {
     type Params: Clone + Send + Sync + Serialize + for<'de> Deserialize<'de>;
 
     /// The return type of the task.
-    type Returns: Send + Sync + std::fmt::Debug;
+    type Returns: Send + Sync + std::fmt::Debug + ResultValue + for<'de> Deserialize<'de>;
 
     /// Used to initialize a task instance from a request.
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self;

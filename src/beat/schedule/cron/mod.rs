@@ -475,7 +475,7 @@ where
 }
 
 fn is_leap_year(year: Ordinal) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
 fn days_in_month(month: Ordinal, year: Ordinal) -> Ordinal {
