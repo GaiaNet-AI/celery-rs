@@ -200,7 +200,7 @@ where
                     self.persist_meta(TaskMeta::retry(
                         self.task_id(),
                         &e,
-                        retry_eta.clone(),
+                        retry_eta,
                         retries_count,
                     ))
                     .await;

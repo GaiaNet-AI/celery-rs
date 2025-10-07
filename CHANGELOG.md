@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Introduced a pluggable result backend API with a Redis implementation, enhanced
+  `AsyncResult` helpers, and a `redis_results` example with docs.
 - Introduced a Redis-backed distributed scheduler backend with configurable lock
   management and task state persistence, plus documentation and examples for
   running multi-instance beat deployments.
@@ -28,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed manual sccache configuration in favor of built-in caching
 - Temporarily disabled minimal versions check due to upstream regex-syntax compatibility issue
 - Removed global `-D warnings` rustflags to prevent builds failing on non-critical warnings
+- Reworked README quick-start and example sections for clearer onboarding.
 
 ## [v0.5.5](https://github.com/rusty-celery/rusty-celery/releases/tag/v0.5.5) - 2023-09-25
 
