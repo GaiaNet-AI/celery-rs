@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn test_route() {
-        let rules = vec![
+        let rules = [
             Rule::new("tasks.backend.*", "backend").unwrap(),
             Rule::new("tasks.ml.*", "ml").unwrap(),
             Rule::new("tasks.*", "celery").unwrap(),

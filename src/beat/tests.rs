@@ -60,7 +60,7 @@ async fn test_task_with_delta_schedule() {
         .await
         .drain()
         .collect();
-    tasks.sort_by(|a, b| (a.1).2.cmp(&(b.1).2));
+    tasks.sort_by_key(|a| (a.1).2);
 
     // Check that the tasks have been executed the correct number of times.
     assert_eq!(
