@@ -3,7 +3,6 @@
 //! [cron crate](https://crates.io/crates/cron).
 
 use chrono::{offset::Utc, TimeZone};
-use std::any::TypeId;
 use std::time::SystemTime;
 
 use super::{descriptor::CronDescriptor, Schedule};
@@ -73,11 +72,7 @@ where
     }
 
     fn describe(&self) -> Option<super::ScheduleDescriptor> {
-        if TypeId::of::<Z>() == TypeId::of::<Utc>() {
-            Some(super::ScheduleDescriptor::cron(self.snapshot()))
-        } else {
-            None
-        }
+        Some(super::ScheduleDescriptor::cron(self.snapshot()))
     }
 }
 
