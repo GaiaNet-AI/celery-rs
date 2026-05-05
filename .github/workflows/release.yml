@@ -61,11 +61,11 @@ jobs:
 
       - name: Wait for workspace crates to update on crates.io
         run: |
-          for subcrate in 'celery-codegen' ; do
+          for subcrate in 'celery-rs-codegen' ; do
               echo "Waiting for $subcrate to update on crates.io..."
               for delay in 1 5 10 20 ; do
                   sleep $delay
-                  subcrate_version=$(curl "https://crates.io/api/v1/crates/$subcrate" 2> /dev/null | jq -r '.crate.newest_version')
+                  subcrate_version=$(curl -H "User-Agent: celery-rs-release/1.0" "https://crates.io/api/v1/crates/$subcrate" 2> /dev/null | jq -r '.crate.newest_version')
                   echo "Latest version pulled: $subcrate_version"
                   if [ "$VERSION" == "$subcrate_version" ]; then
                       echo "$subcrate up-to-date!"
