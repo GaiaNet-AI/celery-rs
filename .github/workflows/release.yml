@@ -27,7 +27,12 @@ jobs:
       - name: Publish ${{ matrix.crate }} to crates.io
         run: |
           cd ${{ matrix.crate }}
-          cargo publish
+          cargo publish 2>&1 | tee /tmp/pub_out.txt; code=${PIPESTATUS[0]}
+          if grep -q "already exists" /tmp/pub_out.txt; then
+            echo "Already published, skipping."
+            exit 0
+          fi
+          exit $code
 
   publish_celery_crate:
     name: Publish celery crate
