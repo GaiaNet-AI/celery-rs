@@ -9,8 +9,8 @@ use crate::{
     task::{Request, TaskOptions, TaskResult},
 };
 use async_trait::async_trait;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::time::{self, Duration};
 
@@ -218,12 +218,12 @@ async fn test_task_with_delayed_first_run() {
 async fn test_beat_max_sleep_duration() {
     let max_sleep_duration = Duration::from_millis(1);
     let test_timeout = Duration::from_millis(20);
-    let num_sync_calls = Rc::new(RefCell::new(0));
+    let num_sync_calls = Arc::new(AtomicUsize::new(0));
 
     // Define a dummy SchedulerBackend that we need to check that sync is called
     // even if there is no task which is ready to be sent.
     struct DummySchedulerBackend {
-        num_sync_calls: Rc<RefCell<usize>>,
+        num_sync_calls: Arc<AtomicUsize>,
     }
 
     impl SchedulerBackend for DummySchedulerBackend {
@@ -235,7 +235,7 @@ async fn test_beat_max_sleep_duration() {
             &mut self,
             _scheduled_tasks: &mut std::collections::BinaryHeap<ScheduledTask>,
         ) -> Result<(), BeatError> {
-            *self.num_sync_calls.borrow_mut() += 1;
+            self.num_sync_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         }
     }
@@ -246,7 +246,7 @@ async fn test_beat_max_sleep_duration() {
         name: "dummy_beat".to_string(),
         scheduler: Scheduler::new(dummy_broker),
         scheduler_backend: DummySchedulerBackend {
-            num_sync_calls: Rc::clone(&num_sync_calls),
+            num_sync_calls: Arc::clone(&num_sync_calls),
         },
         task_routes: vec![],
         default_queue: "celery".to_string(),
@@ -263,8 +263,7 @@ async fn test_beat_max_sleep_duration() {
     assert!(result.is_err()); // The beat should only stop because of the timeout
 
     // Check that sync has been called as expected.
-    use std::ops::Deref;
-    assert!(*num_sync_calls.borrow().deref() >= 2);
+    assert!(num_sync_calls.load(std::sync::atomic::Ordering::Relaxed) >= 2);
 }
 
 ////// IMPLEMENTATION OF DUMMY TASKS THAT CAN BE USED BY TESTS //////

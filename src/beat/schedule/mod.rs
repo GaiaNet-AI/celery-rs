@@ -13,7 +13,7 @@ mod descriptor;
 pub use descriptor::ScheduleDescriptor;
 
 /// The trait that all schedules implement.
-pub trait Schedule: Any {
+pub trait Schedule: Any + Send + Sync {
     /// Compute when a task should be executed again.
     /// If this method returns `None` then the task should
     /// never run again and it is safe to remove it from the

@@ -554,7 +554,7 @@ where
 /// A trait for attempting to create a [`Message`] from `self`. This will be implemented
 /// by types that can act like message "factories", like for instance the
 /// [`Signature`](crate::task::Signature) type.
-pub trait TryCreateMessage {
+pub trait TryCreateMessage: Send + Sync {
     fn try_create_message(&self) -> Result<Message, ProtocolError>;
 }
 

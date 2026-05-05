@@ -64,7 +64,7 @@ where
 
 impl<Z> Schedule for CronSchedule<Z>
 where
-    Z: TimeZone + 'static,
+    Z: TimeZone + Send + Sync + 'static,
 {
     fn next_call_at(&self, _last_run_at: Option<SystemTime>) -> Option<SystemTime> {
         let now = self.time_zone.from_utc_datetime(&Utc::now().naive_utc());

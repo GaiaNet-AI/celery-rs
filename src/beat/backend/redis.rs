@@ -419,7 +419,7 @@ impl super::SchedulerBackend for RedisSchedulerBackend {
 impl DistributedScheduler for RedisSchedulerBackend {
     fn before_tick<'a>(
         &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + Send + 'a>> {
         Box::pin(async move {
             let now = Instant::now();
             let leader_hint = leader_sleep_hint(self.config.lock_renewal_interval);
@@ -464,7 +464,7 @@ impl DistributedScheduler for RedisSchedulerBackend {
     fn after_tick<'a>(
         &'a mut self,
         scheduled_tasks: &'a mut BinaryHeap<ScheduledTask>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
         Box::pin(async move {
             if !self.state.is_leader {
                 return Ok(());
@@ -516,7 +516,7 @@ impl DistributedScheduler for RedisSchedulerBackend {
         })
     }
 
-    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>> {
+    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
         Box::pin(async move {
             if self.state.is_leader {
                 if let Err(err) = self.release_lock().await {

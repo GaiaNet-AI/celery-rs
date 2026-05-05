@@ -12,7 +12,7 @@ pub use redis::{RedisBackendConfig, RedisSchedulerBackend};
 /// The default scheduler backend, [`LocalSchedulerBackend`](struct.LocalSchedulerBackend.html),
 /// doesn't do any external synchronization, so the source of truth is just the locally defined
 /// schedules.
-pub trait SchedulerBackend {
+pub trait SchedulerBackend: Send {
     /// Check whether the internal state of the scheduler should be synchronized.
     /// If this method returns `true`, then `sync` will be called as soon as possible.
     fn should_sync(&self) -> bool;
@@ -69,17 +69,17 @@ impl TickDecision {
     }
 }
 
-pub trait DistributedScheduler {
+pub trait DistributedScheduler: Send {
     fn before_tick<'a>(
         &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<TickDecision, BeatError>> + Send + 'a>>;
 
     fn after_tick<'a>(
         &'a mut self,
         scheduled_tasks: &'a mut BinaryHeap<ScheduledTask>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>>;
 
-    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + 'a>> {
+    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
         Box::pin(async { Ok(()) })
     }
 }
