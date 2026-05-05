@@ -516,7 +516,9 @@ impl DistributedScheduler for RedisSchedulerBackend {
         })
     }
 
-    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
         Box::pin(async move {
             if self.state.is_leader {
                 if let Err(err) = self.release_lock().await {

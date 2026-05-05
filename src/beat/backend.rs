@@ -79,7 +79,9 @@ pub trait DistributedScheduler: Send {
         scheduled_tasks: &'a mut BinaryHeap<ScheduledTask>,
     ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>>;
 
-    fn shutdown<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), BeatError>> + Send + 'a>> {
         Box::pin(async { Ok(()) })
     }
 }

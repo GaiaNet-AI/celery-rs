@@ -235,7 +235,8 @@ async fn test_beat_max_sleep_duration() {
             &mut self,
             _scheduled_tasks: &mut std::collections::BinaryHeap<ScheduledTask>,
         ) -> Result<(), BeatError> {
-            self.num_sync_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.num_sync_calls
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         }
     }
